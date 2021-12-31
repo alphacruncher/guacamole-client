@@ -130,8 +130,8 @@
         "TEXT_CLIENT_STATUS_IDLE"         : "アイドル状態.",
         "TEXT_CLIENT_STATUS_CONNECTING"   : "Guacamoleサーバに接続しています...",
         "TEXT_CLIENT_STATUS_DISCONNECTED" : "切断されました。",
-        "TEXT_CLIENT_STATUS_UNSTABLE"     : "Guacamoleサーバへのネットワーク接続が不安定です。",
-        "TEXT_CLIENT_STATUS_WAITING"      : "Guacamoleサーバに接続しました。応答を待っています",
+        "TEXT_CLIENT_STATUS_UNSTABLE"     : "Nuvolosサーバへのネットワーク接続が不安定です。",
+        "TEXT_CLIENT_STATUS_WAITING"      : "Nuvolosサーバに接続しました。応答を待っています",
         "TEXT_RECONNECT_COUNTDOWN"        : "再接続しています... {REMAINING} {REMAINING, plural, one{second} other{seconds}}..."
 
     },

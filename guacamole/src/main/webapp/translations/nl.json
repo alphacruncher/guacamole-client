@@ -124,7 +124,7 @@
         "TEXT_CLIENT_STATUS_IDLE"         : "Inactief.",
         "TEXT_CLIENT_STATUS_CONNECTING"   : "Verbinden met Guacamole...",
         "TEXT_CLIENT_STATUS_DISCONNECTED" : "De verbinding is verbroken.",
-        "TEXT_CLIENT_STATUS_WAITING"      : "Verbonden met Guacamole. Aan het wachten op reactie...",
+        "TEXT_CLIENT_STATUS_WAITING"      : "Verbonden met Nuvolos. Aan het wachten op reactie...",
         "TEXT_RECONNECT_COUNTDOWN"        : "Opnieuw verbinden over {REMAINING} {REMAINING, plural, one{seconde} other{seconden}}...",
         "TEXT_FILE_TRANSFER_PROGRESS"     : "{PROGRESS} {UNIT, select, b{B} kb{KB} mb{MB} gb{GB} other{}}",
 

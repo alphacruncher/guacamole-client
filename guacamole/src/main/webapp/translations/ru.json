@@ -132,8 +132,8 @@
         "TEXT_CLIENT_STATUS_IDLE"         : "Бездействие.",
         "TEXT_CLIENT_STATUS_CONNECTING"   : "Подключение к Guacamole...",
         "TEXT_CLIENT_STATUS_DISCONNECTED" : "Вы были отключены.",
-        "TEXT_CLIENT_STATUS_UNSTABLE"     : "Сетевое соединение с сервером Guacamole нестабильно.",
-        "TEXT_CLIENT_STATUS_WAITING"      : "Подключено к Guacamole. Ожидание ответа...",
+        "TEXT_CLIENT_STATUS_UNSTABLE"     : "Сетевое соединение с сервером Nuvolos нестабильно.",
+        "TEXT_CLIENT_STATUS_WAITING"      : "Подключено к Nuvolos. Ожидание ответа...",
         "TEXT_RECONNECT_COUNTDOWN"        : "Переподключение через {REMAINING} {REMAINING, plural, one{секунду} few{секунды} many{секунд} other{секунды}}...",
         "TEXT_FILE_TRANSFER_PROGRESS"     : "{PROGRESS} {UNIT, select, b{B} kb{KB} mb{MB} gb{GB} other{}}",
 

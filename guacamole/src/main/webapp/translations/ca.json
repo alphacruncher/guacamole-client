@@ -138,8 +138,8 @@
         "TEXT_CLIENT_STATUS_IDLE"         : "Ociós.",
         "TEXT_CLIENT_STATUS_CONNECTING"   : "S'està connectant a Guacamole ...",
         "TEXT_CLIENT_STATUS_DISCONNECTED" : "Heu estat desconnectats.",
-        "TEXT_CLIENT_STATUS_UNSTABLE"     : "La connexió de xarxa al servidor Guacamole sembla inestable.",
-        "TEXT_CLIENT_STATUS_WAITING"      : "Connectat a Guacamole. Esperant resposta ...",
+        "TEXT_CLIENT_STATUS_UNSTABLE"     : "La connexió de xarxa al servidor Nuvolos sembla inestable.",
+        "TEXT_CLIENT_STATUS_WAITING"      : "Connectat a Nuvolos. Esperant resposta ...",
         "TEXT_RECONNECT_COUNTDOWN"        : "Re-conectant en {REMAINING} {REMAINING, plural, one{segon} other{segons}}...",
         "TEXT_FILE_TRANSFER_PROGRESS"     : "{PROGRESS} {UNIT, select, b{B} kb{KB} mb{MB} gb{GB} other{}}",
 

@@ -141,8 +141,8 @@
         "TEXT_CLIENT_STATUS_IDLE"         : "Ocioso.",
         "TEXT_CLIENT_STATUS_CONNECTING"   : "Conectando ao Guacamole...",
         "TEXT_CLIENT_STATUS_DISCONNECTED" : "Você foi desconectado.",
-        "TEXT_CLIENT_STATUS_UNSTABLE"     : "A conexão de rede ao servidor do Guacamole parece instável.",
-        "TEXT_CLIENT_STATUS_WAITING"      : "Conectado ao Guacamole. Aguardando resposta...",
+        "TEXT_CLIENT_STATUS_UNSTABLE"     : "A conexão de rede ao servidor do Nuvolos parece instável.",
+        "TEXT_CLIENT_STATUS_WAITING"      : "Conectado ao Nuvolos. Aguardando resposta...",
         "TEXT_RECONNECT_COUNTDOWN"        : "Reconectando em {REMAINING} {REMAINING, plural, one{second} other{seconds}}...",
         "TEXT_FILE_TRANSFER_PROGRESS"     : "{PROGRESS} {UNIT, select, b{B} kb{KB} mb{MB} gb{GB} other{}}",
 

@@ -139,8 +139,8 @@
         "TEXT_CLIENT_STATUS_IDLE"         : "Inactif.",
         "TEXT_CLIENT_STATUS_CONNECTING"   : "Connexion à Guacamole...",
         "TEXT_CLIENT_STATUS_DISCONNECTED" : "Vous avez été deconnecté.",
-        "TEXT_CLIENT_STATUS_UNSTABLE"     : "La connexion réseau au serveur Guacamole est instable.",
-        "TEXT_CLIENT_STATUS_WAITING"      : "Connecté à Guacamole. En attente de réponse...",
+        "TEXT_CLIENT_STATUS_UNSTABLE"     : "La connexion réseau au serveur Nuvolos est instable.",
+        "TEXT_CLIENT_STATUS_WAITING"      : "Connecté à Nuvolos. En attente de réponse...",
         "TEXT_RECONNECT_COUNTDOWN"        : "Reconnexion dans {REMAINING} {REMAINING, plural, one{seconde} other{secondes}}...",
         "TEXT_FILE_TRANSFER_PROGRESS"     : "{PROGRESS} {UNIT, select, b{B} kb{KB} mb{MB} gb{GB} other{}}",
 

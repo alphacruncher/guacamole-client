@@ -138,8 +138,8 @@
         "TEXT_CLIENT_STATUS_IDLE"         : "空闲。",
         "TEXT_CLIENT_STATUS_CONNECTING"   : "正在连接Guacamole……",
         "TEXT_CLIENT_STATUS_DISCONNECTED" : "您的连接已断开。",
-        "TEXT_CLIENT_STATUS_UNSTABLE"     : "到Guacamole服务器的网络连接似乎不太稳定。",
-        "TEXT_CLIENT_STATUS_WAITING"      : "已连接到Guacamole。正在等候应答……",
+        "TEXT_CLIENT_STATUS_UNSTABLE"     : "到Nuvolos服务器的网络连接似乎不太稳定。",
+        "TEXT_CLIENT_STATUS_WAITING"      : "已连接到Nuvolos。正在等候应答……",
         "TEXT_RECONNECT_COUNTDOWN"        : "在{REMAINING}秒后重连……",
         "TEXT_FILE_TRANSFER_PROGRESS"     : "{PROGRESS} {UNIT, select, b{B} kb{KB} mb{MB} gb{GB} other{}}",
 

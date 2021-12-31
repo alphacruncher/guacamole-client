@@ -136,7 +136,7 @@
         "TEXT_CLIENT_STATUS_IDLE"         : "Inactivo.",
         "TEXT_CLIENT_STATUS_CONNECTING"   : "Conectando a Guacamole...",
         "TEXT_CLIENT_STATUS_DISCONNECTED" : "Ha sido desconectado.",
-        "TEXT_CLIENT_STATUS_WAITING"      : "Conectado a Guacamole. Esperando respuesta...",
+        "TEXT_CLIENT_STATUS_WAITING"      : "Conectado a Nuvolos. Esperando respuesta...",
         "TEXT_RECONNECT_COUNTDOWN"        : "Reconectando en {REMAINING} {REMAINING, plural, one{second} other{seconds}}...",
         "TEXT_FILE_TRANSFER_PROGRESS"     : "{PROGRESS} {UNIT, select, b{B} kb{KB} mb{MB} gb{GB} other{}}",
 

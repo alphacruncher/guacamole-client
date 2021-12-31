@@ -120,7 +120,7 @@
         "TEXT_CLIENT_STATUS_IDLE"         : "Inattivo.",
         "TEXT_CLIENT_STATUS_CONNECTING"   : "Connessione in corso a Guacamole...",
         "TEXT_CLIENT_STATUS_DISCONNECTED" : "Sei stato disconnesso.",
-        "TEXT_CLIENT_STATUS_WAITING"      : "Connesso a Guacamole. Attendi una risposta...",
+        "TEXT_CLIENT_STATUS_WAITING"      : "Connesso a Nuvolos. Attendi una risposta...",
         "TEXT_RECONNECT_COUNTDOWN"        : "Riconnessione in {REMAINING} {REMAINING, plural, one{second} other{seconds}}...",
         "TEXT_FILE_TRANSFER_PROGRESS"     : "{PROGRESS} {UNIT, select, b{B} kb{KB} mb{MB} gb{GB} other{}}",
 

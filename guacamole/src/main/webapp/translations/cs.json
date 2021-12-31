@@ -140,8 +140,8 @@
         "TEXT_CLIENT_STATUS_IDLE"         : "Nečinný",
         "TEXT_CLIENT_STATUS_CONNECTING"   : "Připojuji ke Guacamole...",
         "TEXT_CLIENT_STATUS_DISCONNECTED" : "Byl jste odpojen.",
-        "TEXT_CLIENT_STATUS_UNSTABLE"     : "Síťové spojení ke  Guacamole serveru se zdá nestabilní.",
-        "TEXT_CLIENT_STATUS_WAITING"      : "Připojen ke Guacamole. Čekání na odpověď...",
+        "TEXT_CLIENT_STATUS_UNSTABLE"     : "Síťové spojení ke  Nuvolos serveru se zdá nestabilní.",
+        "TEXT_CLIENT_STATUS_WAITING"      : "Připojen ke Nuvolos. Čekání na odpověď...",
         "TEXT_RECONNECT_COUNTDOWN"        : "Znovu připojuji  {REMAINING} {REMAINING, plural, one{sekundu} other{sekund}}...",
         "TEXT_FILE_TRANSFER_PROGRESS"     : "{PROGRESS} {UNIT, select, b{B} kb{KB} mb{MB} gb{GB} other{}}",
 

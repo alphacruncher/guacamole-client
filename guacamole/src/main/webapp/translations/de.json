@@ -138,8 +138,8 @@
         "TEXT_CLIENT_STATUS_IDLE"         : "Inaktiv.",
         "TEXT_CLIENT_STATUS_CONNECTING"   : "Verbindungsaufbau zu Guacamole...",
         "TEXT_CLIENT_STATUS_DISCONNECTED" : "Verbindung wurde getrennt.",
-        "TEXT_CLIENT_STATUS_UNSTABLE"     : "Die Verbindung zum Guacamole-Server ist nicht stabil.",
-        "TEXT_CLIENT_STATUS_WAITING"      : "Verbindungsaufbau zu Guacamole. Bitte warten...",
+        "TEXT_CLIENT_STATUS_UNSTABLE"     : "Die Verbindung zum Nuvolos-Server ist nicht stabil.",
+        "TEXT_CLIENT_STATUS_WAITING"      : "Verbindungsaufbau zu Nuvolos. Bitte warten...",
         "TEXT_RECONNECT_COUNTDOWN"        : "Neuverbindung in {REMAINING} {REMAINING, plural, one{Sekunde} other{Sekunden}}...",
         "TEXT_FILE_TRANSFER_PROGRESS"     : "{PROGRESS} {UNIT, select, b{B} kb{KB} mb{MB} gb{GB} other{}}",
 

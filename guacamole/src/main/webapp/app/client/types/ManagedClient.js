@@ -354,19 +354,8 @@ angular.module('client').factory('ManagedClient', ['$rootScope', '$injector',
      *     connection group having the given ID.
      */
     ManagedClient.getInstance = function getInstance(id, connectionParameters) {
-
-        var tunnel;
-
-        // If WebSocket available, try to use it.
-        if ($window.WebSocket)
-            tunnel = new Guacamole.ChainedTunnel(
-                new Guacamole.WebSocketTunnel('websocket-tunnel'),
-                new Guacamole.HTTPTunnel('tunnel')
-            );
-        
-        // If no WebSocket, then use HTTP.
-        else
-            tunnel = new Guacamole.HTTPTunnel('tunnel');
+        // Always use websocket
+        var tunnel = new Guacamole.WebSocketTunnel('websocket-tunnel');
 
         // Get new client instance
         var client = new Guacamole.Client(tunnel);
