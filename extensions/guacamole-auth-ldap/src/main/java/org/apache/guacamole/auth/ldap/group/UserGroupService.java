@@ -28,16 +28,17 @@ import java.util.Map;
 import java.util.Set;
 import org.apache.directory.api.ldap.model.entry.Entry;
 import org.apache.directory.api.ldap.model.exception.LdapInvalidAttributeValueException;
+import org.apache.directory.api.ldap.model.filter.AndNode;
 import org.apache.directory.api.ldap.model.filter.EqualityNode;
 import org.apache.directory.api.ldap.model.filter.ExprNode;
 import org.apache.directory.api.ldap.model.filter.NotNode;
-import org.apache.directory.api.ldap.model.filter.PresenceNode;
 import org.apache.directory.api.ldap.model.name.Dn;
-import org.apache.directory.ldap.client.api.LdapNetworkConnection;
-import org.apache.guacamole.auth.ldap.conf.ConfigurationService;
 import org.apache.guacamole.auth.ldap.conf.MemberAttributeType;
 import org.apache.guacamole.GuacamoleException;
+import org.apache.guacamole.auth.ldap.ConnectedLDAPConfiguration;
 import org.apache.guacamole.auth.ldap.ObjectQueryService;
+import org.apache.guacamole.auth.ldap.conf.LDAPConfiguration;
+import org.apache.guacamole.auth.ldap.user.LDAPAuthenticatedUser;
 import org.apache.guacamole.net.auth.UserGroup;
 import org.apache.guacamole.net.auth.simple.SimpleUserGroup;
 import org.slf4j.Logger;
@@ -55,12 +56,6 @@ public class UserGroupService {
     private static final Logger logger = LoggerFactory.getLogger(UserGroupService.class);
 
     /**
-     * Service for retrieving LDAP server configuration information.
-     */
-    @Inject
-    private ConfigurationService confService;
-
-    /**
      * Service for executing LDAP queries.
      */
     @Inject
@@ -73,33 +68,41 @@ public class UserGroupService {
      * defined (may always return zero results), it should only be explicitly
      * excluded if it is expected to have been defined.
      *
+     * @param config
+     *     The configuration of the LDAP server being queried.
+     *
      * @return
      *     The base search filter which should be used to retrieve user groups.
      *
      * @throws GuacamoleException
      *     If guacamole.properties cannot be parsed.
      */
-    private ExprNode getGroupSearchFilter() throws GuacamoleException {
+    private ExprNode getGroupSearchFilter(LDAPConfiguration config) throws GuacamoleException {
+
+        // Use filter defined by "ldap-group-search-filter" as basis for all
+        // retrieval of user groups
+        ExprNode groupFilter = config.getGroupSearchFilter();
 
         // Explicitly exclude guacConfigGroup object class only if it should
         // be assumed to be defined (query may fail due to no such object
         // class existing otherwise)
-        if (confService.getConfigurationBaseDN() != null)
-            return new NotNode(new EqualityNode("objectClass","guacConfigGroup"));
+        if (config.getConfigurationBaseDN() != null) {
+            groupFilter = new AndNode(
+                groupFilter,
+                new NotNode(new EqualityNode<String>("objectClass", "guacConfigGroup"))
+            );
+        }
 
-        // Read any object as a group if LDAP is not being used for connection
-        // storage (guacConfigGroup)
-        return new PresenceNode("objectClass");
-
+        return groupFilter;
+        
     }
 
     /**
-     * Returns all Guacamole user groups accessible to the user currently bound
-     * under the given LDAP connection.
+     * Returns all Guacamole user groups accessible to the given user.
      *
-     * @param ldapConnection
-     *     The current connection to the LDAP server, associated with the
-     *     current user.
+     * @param user
+     *     The AuthenticatedUser object associated with the user who is
+     *     currently authenticated with Guacamole.
      *
      * @return
      *     All user groups accessible to the user currently bound under the
@@ -109,22 +112,31 @@ public class UserGroupService {
      * @throws GuacamoleException
      *     If an error occurs preventing retrieval of user groups.
      */
-    public Map<String, UserGroup> getUserGroups(LdapNetworkConnection ldapConnection)
+    public Map<String, UserGroup> getUserGroups(LDAPAuthenticatedUser user)
             throws GuacamoleException {
 
+        ConnectedLDAPConfiguration config = user.getLDAPConfiguration();
+        
         // Do not return any user groups if base DN is not specified
-        Dn groupBaseDN = confService.getGroupBaseDN();
+        Dn groupBaseDN = config.getGroupBaseDN();
         if (groupBaseDN == null)
             return Collections.emptyMap();
 
+        // Gather all attributes relevant for a group
+        String memberAttribute = config.getMemberAttribute();
+        Collection<String> groupAttributes = new HashSet<>(config.getGroupNameAttributes());
+        groupAttributes.add(memberAttribute);
+
         // Retrieve all visible user groups which are not guacConfigGroups
-        Collection<String> attributes = confService.getGroupNameAttributes();
+        Collection<String> attributes = config.getGroupNameAttributes();
         List<Entry> results = queryService.search(
-            ldapConnection,
+            config,
+            config.getLDAPConnection(),
             groupBaseDN,
-            getGroupSearchFilter(),
+            getGroupSearchFilter(config),
             attributes,
-            null
+            null,
+            groupAttributes
         );
 
         // Convert retrieved user groups to map of identifier to Guacamole
@@ -155,9 +167,8 @@ public class UserGroupService {
      * user is a member of. Only user groups which are readable by the current
      * user will be retrieved.
      *
-     * @param ldapConnection
-     *     The current connection to the LDAP server, associated with the
-     *     current user.
+     * @param config
+     *     The configuration of the LDAP server being queried.
      *
      * @param userDN
      *     The DN of the user whose group membership should be retrieved.
@@ -169,24 +180,27 @@ public class UserGroupService {
      * @throws GuacamoleException
      *     If an error occurs preventing retrieval of user groups.
      */
-    public List<Entry> getParentUserGroupEntries(LdapNetworkConnection ldapConnection,
-            Dn userDN) throws GuacamoleException {
+    public List<Entry> getParentUserGroupEntries(ConnectedLDAPConfiguration config, Dn userDN)
+            throws GuacamoleException {
 
         // Do not return any user groups if base DN is not specified
-        Dn groupBaseDN = confService.getGroupBaseDN();
+        Dn groupBaseDN = config.getGroupBaseDN();
         if (groupBaseDN == null)
             return Collections.emptyList();
 
         // memberAttribute specified in properties could contain DN or username 
-        MemberAttributeType memberAttributeType = confService.getMemberAttributeType();
+        MemberAttributeType memberAttributeType = config.getMemberAttributeType();
         String userIDorDN = userDN.toString();
+        Collection<String> userAttributes = config.getUsernameAttributes();
         if (memberAttributeType == MemberAttributeType.UID) {
             // Retrieve user objects with userDN
             List<Entry> userEntries = queryService.search(
-                ldapConnection,
+                config,
+                config.getLDAPConnection(),
                 userDN,
-                confService.getUserSearchFilter(),
-                0);
+                config.getUserSearchFilter(),
+                0,
+                userAttributes);
             // ... there can surely only be one
             if (userEntries.size() != 1)
                 logger.warn("user DN \"{}\" does not return unique value "
@@ -194,7 +208,6 @@ public class UserGroupService {
             else {
                 // determine unique identifier for user
                 Entry userEntry = userEntries.get(0);
-                Collection<String> userAttributes = confService.getUsernameAttributes();
                 try {
                     userIDorDN = queryService.getIdentifier(userEntry,
                                          userAttributes);
@@ -208,14 +221,21 @@ public class UserGroupService {
             }
         }
 
+        // Gather all attributes relevant for a group
+        String memberAttribute = config.getMemberAttribute();
+        Collection<String> groupAttributes = new HashSet<>(config.getGroupNameAttributes());
+        groupAttributes.add(memberAttribute);
+
         // Get all groups the user is a member of starting at the groupBaseDN,
         // excluding guacConfigGroups
         return queryService.search(
-            ldapConnection,
+            config,
+            config.getLDAPConnection(),
             groupBaseDN,
-            getGroupSearchFilter(),
-            Collections.singleton(confService.getMemberAttribute()),
-            userIDorDN
+            getGroupSearchFilter(config),
+            Collections.singleton(memberAttribute),
+            userIDorDN,
+            groupAttributes
         );
 
     }
@@ -225,9 +245,8 @@ public class UserGroupService {
      * member of. Only identifiers of user groups which are readable by the
      * current user will be retrieved.
      *
-     * @param ldapConnection
-     *     The current connection to the LDAP server, associated with the
-     *     current user.
+     * @param config
+     *     The configuration of the LDAP server being queried.
      *
      * @param userDN
      *     The DN of the user whose group membership should be retrieved.
@@ -239,11 +258,11 @@ public class UserGroupService {
      * @throws GuacamoleException
      *     If an error occurs preventing retrieval of user groups.
      */
-    public Set<String> getParentUserGroupIdentifiers(LdapNetworkConnection ldapConnection,
-            Dn userDN) throws GuacamoleException {
+    public Set<String> getParentUserGroupIdentifiers(ConnectedLDAPConfiguration config, Dn userDN)
+            throws GuacamoleException {
 
-        Collection<String> attributes = confService.getGroupNameAttributes();
-        List<Entry> userGroups = getParentUserGroupEntries(ldapConnection, userDN);
+        Collection<String> attributes = config.getGroupNameAttributes();
+        List<Entry> userGroups = getParentUserGroupEntries(config, userDN);
 
         Set<String> identifiers = new HashSet<>(userGroups.size());
         userGroups.forEach(entry -> {

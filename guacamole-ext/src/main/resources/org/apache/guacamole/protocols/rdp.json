@@ -104,6 +104,7 @@
                         "hu-hu-qwertz",                        
                         "it-it-qwerty",
                         "ja-jp-qwerty",
+                        "no-no-qwerty",
                         "pt-br-qwerty",
                         "sv-se-qwerty",
                         "da-dk-qwerty",
@@ -113,6 +114,11 @@
                 {
                     "name"  : "timezone",
                     "type"  : "TIMEZONE"
+                },
+                {
+                    "name"    : "enable-touch",
+                    "type"    : "BOOLEAN",
+                    "options" : [ "true" ]
                 },
                 {
                     "name"    : "console",
@@ -143,6 +149,11 @@
                     "options" : [ "", "8", "16", "24", "32" ]
                 },
                 {
+                    "name"    : "force-lossless",
+                    "type"    : "BOOLEAN",
+                    "options" : [ "true" ]
+                },
+                {
                     "name"    : "resize-method",
                     "type"    : "ENUM",
                     "options" : [ "", "reconnect", "display-update" ]
@@ -158,6 +169,11 @@
         {
             "name"  : "clipboard",
             "fields" : [
+                {
+                    "name"    : "normalize-clipboard",
+                    "type"    : "ENUM",
+                    "options" : [ "", "preserve", "unix", "windows" ]
+                },
                 {
                     "name"    : "disable-copy",
                     "type"    : "BOOLEAN",
@@ -348,6 +364,11 @@
                     "options" : [ "true" ]
                 },
                 {
+                    "name"  : "recording-exclude-touch",
+                    "type"  : "BOOLEAN",
+                    "options" : [ "true" ]
+                },
+                {
                     "name"  : "recording-include-keys",
                     "type"  : "BOOLEAN",
                     "options" : [ "true" ]
@@ -436,6 +457,10 @@
                 {
                     "name" : "wol-broadcast-addr",
                     "type" : "TEXT"
+                },
+                {
+                    "name" : "wol-udp-port",
+                    "type" : "NUMERIC"
                 },
                 {
                     "name" : "wol-wait-time",

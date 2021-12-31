@@ -128,13 +128,16 @@ public class LDAPGuacamoleProperties {
     };
 
     /**
-     * The DN of the user that the LDAP authentication should bind as when
-     * searching for the user accounts of users attempting to log in. If not
-     * specified, the DNs of users attempting to log in will be derived from
-     * the LDAP_BASE_DN and LDAP_USERNAME_ATTRIBUTE directly.
+     * The user that the LDAP extension should bind as when searching for the
+     * accounts of users attempting to log in. The format of this parameter
+     * will vary based on the LDAP server implementation - often it is expected
+     * to be in full LDAP DN format; however various LDAP server implementations
+     * allow this to be in other formats (e.g. Active Directory allows
+     * User Principal Name, or UPN, format). For this reason the configuration
+     * allows this to be any string.
      */
-    public static final LdapDnGuacamoleProperty LDAP_SEARCH_BIND_DN =
-            new LdapDnGuacamoleProperty() {
+    public static final StringGuacamoleProperty LDAP_SEARCH_BIND_DN =
+            new StringGuacamoleProperty() {
 
         @Override
         public String getName() { return "ldap-search-bind-dn"; }
@@ -208,6 +211,17 @@ public class LDAPGuacamoleProperties {
     };
 
     /**
+     * A search filter to apply to group LDAP queries.
+     */
+    public static final LdapFilterGuacamoleProperty LDAP_GROUP_SEARCH_FILTER =
+            new LdapFilterGuacamoleProperty() {
+
+        @Override
+        public String getName() { return "ldap-group-search-filter"; }
+
+    };
+
+    /**
      * Whether or not we should follow referrals.
      */
     public static final BooleanGuacamoleProperty LDAP_FOLLOW_REFERRALS =
@@ -237,6 +251,17 @@ public class LDAPGuacamoleProperties {
 
         @Override
         public String getName() { return "ldap-operation-timeout"; }
+
+    };
+
+    /**
+     * Number of milliseconds to wait for responses from the LDAP server.
+     */
+    public static final IntegerGuacamoleProperty LDAP_NETWORK_TIMEOUT =
+            new IntegerGuacamoleProperty() {
+
+        @Override
+        public String getName() { return "ldap-network-timeout"; }
 
     };
 

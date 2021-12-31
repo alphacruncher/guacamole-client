@@ -23,7 +23,7 @@
 ##
 ## Automatically configures and starts Guacamole under Tomcat. Guacamole's
 ## guacamole.properties file will be automatically generated based on the
-## linked database container (either MySQL or PostgreSQL) and the linked guacd
+## linked database container (either MySQL, PostgreSQL or SQLServer) and the linked guacd
 ## container. The Tomcat process will ultimately replace the process of this
 ## script, running in the foreground until terminated.
 ##
@@ -91,7 +91,7 @@ FATAL: Missing required environment variables
 -------------------------------------------------------------------------------
 If using a MySQL database, you must provide each of the following
 environment variables or their corresponding Docker secrets by appending _FILE
-to the environment variable, and setting the value to the path of the 
+to the environment variable, and setting the value to the path of the
 corresponding secret:
 
     MYSQL_USER         The user to authenticate as when connecting to
@@ -158,7 +158,7 @@ END
         mysql_missing_vars
         exit 1;
     fi
-    
+
     if [ -n "$MYSQL_PASSWORD_FILE" ]; then
         set_property "mysql-password" "`cat "$MYSQL_PASSWORD_FILE"`"
     elif [ -n "$MYSQL_PASSWORD" ]; then
@@ -248,7 +248,7 @@ FATAL: Missing required environment variables
 -------------------------------------------------------------------------------
 If using a PostgreSQL database, you must provide each of the following
 environment variables or their corresponding Docker secrets by appending _FILE
-to the environment variable, and setting the value to the path of the 
+to the environment variable, and setting the value to the path of the
 corresponding secret:
 
     POSTGRES_USER      The user to authenticate as when connecting to
@@ -315,7 +315,7 @@ END
         postgres_missing_vars
         exit 1;
     fi
-    
+
     if [ -n "$POSTGRES_PASSWORD_FILE" ]; then
         set_property "postgresql-password" "`cat "$POSTGRES_PASSWORD_FILE"`"
     elif [ -n "$POSTGRES_PASSWORD" ]; then
@@ -403,6 +403,154 @@ END
 
 }
 
+# Print error message regarding missing required variables for SQLServer authentication
+sqlserver_missing_vars() {
+    cat <<END
+FATAL: Missing required environment variables
+-------------------------------------------------------------------------------
+If using a SQLServer database, you must provide each of the following
+environment variables:
+
+    SQLSERVER_USER     The user to authenticate as when connecting to
+                       SQLServer.
+
+    SQLSERVER_PASSWORD The password to use when authenticating with SQLServer
+                       as SQLSERVER_USER.
+
+    SQLSERVER_DATABASE The name of the SQLServer database to use for Guacamole
+                       authentication.
+
+Alternatively, if you want to store database credentials using Docker secrets,
+set the path of the corresponding secrets in the following three variables:
+
+    SQLSERVER_DATABASE_FILE   The path of the docker secret containing the name
+                              of database to use for Guacamole authentication.
+
+    SQLSERVER_USER_FILE       The path of the docker secret containing the name of
+                              the user that Guacamole will use to connect to SQLServer.
+
+    SQLSERVER_PASSWORD_FILE   The path of the docker secret containing the
+                              password that Guacamole will provide when connecting to 
+                              SQLServer as SQLSERVER_USER.
+
+END
+    exit 1;
+}
+
+##
+## Adds properties to guacamole.properties which select the SQLServer
+## authentication provider, and configure it to connect to the linked
+## SQLServer container. If a SQLServer database is explicitly specified using
+## the SQLSERVER_HOSTNAME and SQLSERVER_PORT environment variables, that will
+## be used instead of a linked container.
+##
+associate_sqlserver() {
+
+    # Use linked container if specified
+    if [ -n "$SQLSERVER_NAME" ]; then
+        SQLSERVER_HOSTNAME="$SQLSERVER_PORT_1433_TCP_ADDR"
+        SQLSERVER_PORT="$SQLSERVER_PORT_1433_TCP_PORT"
+    fi
+
+    # Use default port if none specified
+    SQLSERVER_PORT="${SQLSERVER_PORT-1433}"
+
+    # Verify required connection information is present
+    if [ -z "$SQLSERVER_HOSTNAME" -o -z "$SQLSERVER_PORT" ]; then
+        cat <<END
+FATAL: Missing SQLSERVER_HOSTNAME or "sqlserver" link.
+-------------------------------------------------------------------------------
+If using a SQLServer database, you must either:
+
+(a) Explicitly link that container with the link named "sqlserver".
+
+(b) If not using a Docker container for SQLServer, explicitly specify the TCP
+    connection to your database using the following environment variables:
+
+    SQLSERVER_HOSTNAME The hostname or IP address of the SQLServer server. If
+                       not using a SQLServer Docker container and
+                       corresponding link, this environment variable is
+                       *REQUIRED*.
+
+    SQLSERVER_PORT     The port on which the SQLServer server is listening for
+                       TCP connections. This environment variable is option. If
+                       omitted, the standard SQLServer port of 1433 will be
+                       used.
+END
+        exit 1;
+    fi
+
+    # Verify that the required Docker secrets are present, else, default to their normal environment variables
+    if [ -n "$SQLSERVER_USER_FILE" ]; then
+        set_property "sqlserver-username" "`cat "$SQLSERVER_USER_FILE"`"
+    elif [ -n "$SQLSERVER_USER" ]; then
+        set_property "sqlserver-username" "$SQLSERVER_USER"
+    else
+        sqlserver_missing_vars
+        exit 1;
+    fi
+
+    if [ -n "$SQLSERVER_PASSWORD_FILE" ]; then
+        set_property "sqlserver-password" "`cat "$SQLSERVER_PASSWORD_FILE"`"
+    elif [ -n "$SQLSERVER_PASSWORD" ]; then
+        set_property "sqlserver-password" "$SQLSERVER_PASSWORD"
+    else
+        sqlserver_missing_vars
+        exit 1;
+    fi
+
+    if [ -n "$SQLSERVER_DATABASE_FILE" ]; then
+        set_property "sqlserver-database" "`cat "$SQLSERVER_DATABASE_FILE"`"
+    elif [ -n "$SQLSERVER_DATABASE" ]; then
+        set_property "sqlserver-database" "$SQLSERVER_DATABASE"
+    else
+        sqlserver_missing_vars
+        exit 1;
+    fi
+
+    # Update config file
+    set_property "sqlserver-hostname" "$SQLSERVER_HOSTNAME"
+    set_property "sqlserver-port"     "$SQLSERVER_PORT"
+    set_property "sqlserver-driver"   "microsoft2005"
+
+    set_optional_property               \
+        "sqlserver-absolute-max-connections" \
+        "$SQLSERVER_ABSOLUTE_MAX_CONNECTIONS"
+
+    set_optional_property                    \
+        "sqlserver-default-max-connections" \
+        "$SQLSERVER_DEFAULT_MAX_CONNECTIONS"
+
+    set_optional_property                          \
+        "sqlserver-default-max-group-connections" \
+        "$SQLSERVER_DEFAULT_MAX_GROUP_CONNECTIONS"
+
+    set_optional_property                             \
+        "sqlserver-default-max-connections-per-user" \
+        "$SQLSERVER_DEFAULT_MAX_CONNECTIONS_PER_USER"
+
+    set_optional_property                                   \
+        "sqlserver-default-max-group-connections-per-user" \
+        "$SQLSERVER_DEFAULT_MAX_GROUP_CONNECTIONS_PER_USER"
+
+    set_optional_property          \
+        "sqlserver-user-required" \
+        "$SQLSERVER_USER_REQUIRED"
+
+    set_optional_property                  \
+        "sqlserver-auto-create-accounts"  \
+        "$SQLSERVERQL_AUTO_CREATE_ACCOUNTS"
+
+    set_optional_property      \
+        "sqlserver-instance"  \
+        "$SQLSERVERQL_INSTANCE"
+
+    # Add required .jar files to GUACAMOLE_LIB and GUACAMOLE_EXT
+    ln -s /opt/guacamole/sqlserver/mssql-jdbc-*.jar "$GUACAMOLE_LIB"
+    ln -s /opt/guacamole/sqlserver/guacamole-auth-*.jar "$GUACAMOLE_EXT"
+
+}
+
 ##
 ## Adds properties to guacamole.properties which select the LDAP
 ## authentication provider, and configure it to connect to the specified LDAP
@@ -443,6 +591,7 @@ END
     set_optional_property "ldap-user-search-filter"         "$LDAP_USER_SEARCH_FILTER"
     set_optional_property "ldap-config-base-dn"             "$LDAP_CONFIG_BASE_DN"
     set_optional_property "ldap-group-base-dn"              "$LDAP_GROUP_BASE_DN"
+    set_optional_property "ldap-group-search-filter"        "$LDAP_GROUP_SEARCH_FILTER"
     set_optional_property "ldap-member-attribute-type"      "$LDAP_MEMBER_ATTRIBUTE_TYPE"
     set_optional_property "ldap-group-name-attribute"       "$LDAP_GROUP_NAME_ATTRIBUTE"
     set_optional_property "ldap-dereference-aliases"        "$LDAP_DEREFERENCE_ALIASES"
@@ -470,13 +619,13 @@ FATAL: Missing required environment variables
 If using RADIUS server, you must provide each of the following environment
 variables:
 
-    RADIUS_SHARED_SECRET   The shared secret to use when talking to the 
+    RADIUS_SHARED_SECRET   The shared secret to use when talking to the
                            RADIUS server.
 
-    RADIUS_AUTH_PROTOCOL   The authentication protocol to use when talking 
+    RADIUS_AUTH_PROTOCOL   The authentication protocol to use when talking
                            to the RADIUS server.
-                           Supported values are: 
-                             pap, chap, mschapv1, mschapv2, eap-md5, 
+                           Supported values are:
+                             pap, chap, mschapv1, mschapv2, eap-md5,
                              eap-tls and eap-ttls.
 END
         exit 1;
@@ -485,7 +634,7 @@ END
     # Verify provided files do exist and are readable
     if [ -n "$RADIUS_KEY_FILE" -a ! -r "$RADIUS_KEY_FILE" ]; then
        cat <<END
-FATAL: Provided file RADIUS_KEY_FILE=$RADIUS_KEY_FILE does not exist 
+FATAL: Provided file RADIUS_KEY_FILE=$RADIUS_KEY_FILE does not exist
        or is not readable!
 -------------------------------------------------------------------------------
 If you provide key or CA files you need to mount those into the container and
@@ -495,7 +644,7 @@ END
     fi
     if [ -n "$RADIUS_CA_FILE" -a ! -r "$RADIUS_CA_FILE" ]; then
        cat <<END
-FATAL: Provided file RADIUS_CA_FILE=$RADIUS_CA_FILE does not exist 
+FATAL: Provided file RADIUS_CA_FILE=$RADIUS_CA_FILE does not exist
        or is not readable!
 -------------------------------------------------------------------------------
 If you provide key or CA files you need to mount those into the container and
@@ -547,7 +696,7 @@ associate_openid() {
     if [ -z "$OPENID_AUTHORIZATION_ENDPOINT" ] || \
        [ -z "$OPENID_JWKS_ENDPOINT" ]          || \
        [ -z "$OPENID_ISSUER" ]                 || \
-       [ -z "$OPENID_CLIENT_ID" ]              || \          
+       [ -z "$OPENID_CLIENT_ID" ]              || \
        [ -z "$OPENID_REDIRECT_URI" ]
     then
         cat <<END
@@ -559,19 +708,19 @@ environment variables:
     OPENID_AUTHORIZATION_ENDPOINT   The authorization endpoint (URI) of the OpenID service.
 
     OPENID_JWKS_ENDPOINT            The endpoint (URI) of the JWKS service which defines
-                                    how received ID tokens (JSON Web Tokens or JWTs) 
+                                    how received ID tokens (JSON Web Tokens or JWTs)
                                     shall be validated.
 
     OPENID_ISSUER                   The issuer to expect for all received ID tokens.
 
-    OPENID_CLIENT_ID                The OpenID client ID which should be submitted 
-                                    to the OpenID service when necessary. 
-                                    This value is typically provided to you by the OpenID 
+    OPENID_CLIENT_ID                The OpenID client ID which should be submitted
+                                    to the OpenID service when necessary.
+                                    This value is typically provided to you by the OpenID
                                     service when OpenID credentials are generated for your application.
 
-    OPENID_REDIRECT_URI             The URI that should be submitted to the OpenID service such that 
-                                    they can redirect the authenticated user back to Guacamole after 
-                                    the authentication process is complete. This must be the full URL 
+    OPENID_REDIRECT_URI             The URI that should be submitted to the OpenID service such that
+                                    they can redirect the authenticated user back to Guacamole after
+                                    the authentication process is complete. This must be the full URL
                                     that a user would enter into their browser to access Guacamole.
 END
         exit 1;
@@ -584,6 +733,7 @@ END
     set_property          "openid-client-id"                 "$OPENID_CLIENT_ID"
     set_property          "openid-redirect-uri"              "$OPENID_REDIRECT_URI"
     set_optional_property "openid-username-claim-type"       "$OPENID_USERNAME_CLAIM_TYPE"
+    set_optional_property "openid-max-token-validity"        "$OPENID_MAX_TOKEN_VALIDITY"
 
     # Add required .jar files to GUACAMOLE_EXT
     # "1-{}" make it sorted as a first provider (only authentication)
@@ -622,14 +772,14 @@ associate_duo() {
         cat <<END
 FATAL: Missing required environment variables
 -------------------------------------------------------------------------------
-If using the Duo authentication extension, you must provide each of the 
+If using the Duo authentication extension, you must provide each of the
 following environment variables:
 
     DUO_API_HOSTNAME        The hostname of the Duo API endpoint.
 
     DUO_INTEGRATION_KEY     The integration key provided for Guacamole by Duo.
 
-    DUO_SECRET_KEY          The secret key provided for Guacamole by Duo. 
+    DUO_SECRET_KEY          The secret key provided for Guacamole by Duo.
 
     DUO_APPLICATION_KEY     An arbitrary, random key.
                             This value must be at least 40 characters.
@@ -709,15 +859,28 @@ associate_json() {
 }
 
 ##
+## Adds api-session-timeout to guacamole.properties
+##
+associate_apisessiontimeout() {
+    set_optional_property "api-session-timeout" "$API_SESSION_TIMEOUT"
+}
+
+##
 ## Starts Guacamole under Tomcat, replacing the current process with the
 ## Tomcat process. As the current process will be replaced, this MUST be the
 ## last function run within the script.
 ##
 start_guacamole() {
 
+    # User-only writable CATALINA_BASE
+    export CATALINA_BASE=$HOME/tomcat
+    for dir in logs temp webapps work; do
+        mkdir -p $CATALINA_BASE/$dir
+    done
+    cp -R /usr/local/tomcat/conf $CATALINA_BASE
+
     # Install webapp
-    rm -Rf /usr/local/tomcat/webapps/${WEBAPP_CONTEXT:-guacamole}
-    ln -sf /opt/guacamole/guacamole.war /usr/local/tomcat/webapps/${WEBAPP_CONTEXT:-guacamole}.war
+    ln -sf /opt/guacamole/guacamole.war $CATALINA_BASE/webapps/${WEBAPP_CONTEXT:-guacamole}.war
 
     # Start tomcat
     cd /usr/local/tomcat
@@ -805,6 +968,12 @@ if [ -n "$POSTGRES_DATABASE" -o -n "$POSTGRES_DATABASE_FILE" ]; then
     INSTALLED_AUTH="$INSTALLED_AUTH postgres"
 fi
 
+# Use SQLServer if database specified
+if [ -n "$SQLSERVER_DATABASE" -o -n "$SQLSERVER_DATABASE_FILE" ]; then
+    associate_sqlserver
+    INSTALLED_AUTH="$INSTALLED_AUTH sqlserver"
+fi
+
 # Use LDAP directory if specified
 if [ -n "$LDAP_HOSTNAME" ]; then
     associate_ldap
@@ -832,10 +1001,11 @@ if [ -z "$INSTALLED_AUTH" -a -z "$GUACAMOLE_HOME_TEMPLATE" ]; then
 FATAL: No authentication configured
 -------------------------------------------------------------------------------
 The Guacamole Docker container needs at least one authentication mechanism in
-order to function, such as a MySQL database, PostgreSQL database, LDAP
-directory or RADIUS server. Please specify at least the MYSQL_DATABASE or 
-POSTGRES_DATABASE environment variables, or check Guacamole's Docker 
-documentation regarding configuring LDAP and/or custom extensions.
+order to function, such as a MySQL database, PostgreSQL database, SQLServer
+database, LDAP directory or RADIUS server. Please specify at least the
+MYSQL_DATABASE or POSTGRES_DATABASE or SQLSERVER_DATABASE environment variables,
+or check Guacamole's Docker documentation regarding configuring LDAP and/or
+custom extensions.
 END
     exit 1;
 fi
@@ -863,6 +1033,11 @@ fi
 # Use json-auth if specified.
 if [ -n "$JSON_SECRET_KEY" ]; then
     associate_json
+fi
+
+# Use api-session-timeout if specified.
+if [ -n "$API_SESSION_TIMEOUT" ]; then
+    associate_apisessiontimeout
 fi
 
 # Set logback level if specified
