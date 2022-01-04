@@ -19,6 +19,16 @@
 
 var Guacamole = Guacamole || {};
 
+tf.wasm.setWasmPaths(
+    'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm/dist/'
+);
+
+tf.setBackend('webgl').then(() => {
+    tf.loadGraphModel("/app/tfjs/model.json").then(model => {
+        Guacamole.scaleModel = model;
+    });
+});
+
 /**
  * Abstract ordered drawing surface. Each Layer contains a canvas element and
  * provides simple drawing instructions for drawing to that canvas element,
@@ -64,7 +74,8 @@ Guacamole.Layer = function(width, height) {
      * @type {!HTMLCanvasElement}
      */
     var canvas = document.createElement("canvas");
-
+    var canvasScaled = document.createElement("canvas");
+    var numChannels = 3;
     /**
      * The 2D display context of the canvas element backing this Layer.
      *
@@ -72,7 +83,9 @@ Guacamole.Layer = function(width, height) {
      * @type {!CanvasRenderingContext2D}
      */
     var context = canvas.getContext("2d");
+    var contextScaled = canvasScaled.getContext("2d");
     context.save();
+    contextScaled.save();
 
     /**
      * Whether the layer has not yet been drawn to. Once any draw operation
@@ -131,6 +144,32 @@ Guacamole.Layer = function(width, height) {
         0xF: "lighter"
     };
 
+    var drawScaledImage =  function drawScaledImage(x, y, image) {
+        contextScaled.drawImage(image, x * 2, y * 2, image.width * 2, image.height * 2);
+        const iMax = Math.ceil(image.width / 32.0);
+        const jMax = Math.ceil(image.height / 32.0);
+
+        if (iMax > 0 && jMax > 0) {
+            const lowRes = tf.browser
+                    .fromPixels(image,numChannels)
+                    .pad([[0, jMax * 32 - image.height],[0, iMax * 32 - image.width],[0,0]])
+                    .reshape([jMax,32, iMax, 32,numChannels])
+                    .transpose([0,2,1,3,4])
+                    .reshape([-1,32,32,numChannels])
+                    .cast("float32")
+                    .div(255.0);
+
+            Guacamole.scaleModel.executeAsync({ input_1: lowRes }).then(prediction => {
+                const predictionClipped = prediction.clipByValue(0, 1).reshape([jMax,iMax,64,64,numChannels]).transpose([0,2,1,3,4]).reshape([jMax*64,iMax*64,numChannels]).slice(0,[image.height * 2, image.width * 2]);
+                tf.browser.toPixels(
+                    predictionClipped,
+                    null
+                ).then(imageData => {
+                    contextScaled.putImageData(new ImageData(imageData, image.width * 2, image.height * 2), x*2, y*2);
+                });
+            });
+        }
+    };
     /**
      * Resizes the canvas element backing this Layer. This function should only
      * be used internally.
@@ -179,12 +218,16 @@ Guacamole.Layer = function(width, height) {
             // Resize canvas
             canvas.width = canvasWidth;
             canvas.height = canvasHeight;
+            canvasScaled.width = 2*canvasWidth;
+            canvasScaled.height = 2*canvasHeight;
 
             // Redraw old data, if any
-            if (oldData)
+            if (oldData) {
                 context.drawImage(oldData,
                     0, 0, oldData.width, oldData.height,
                     0, 0, oldData.width, oldData.height);
+                drawScaledImage(context.getImageData(0, 0, oldData.width, oldData.height),0,0);
+            }
 
             // Restore composite operation
             context.globalCompositeOperation = oldCompositeOperation;
@@ -298,6 +341,10 @@ Guacamole.Layer = function(width, height) {
         return canvas;
     };
 
+    this.getCanvasScaled = function getCanvas() {
+        return canvasScaled;
+    };
+
     /**
      * Returns a new canvas element containing the same image as this Layer.
      * Unlike getCanvas(), the canvas element returned is guaranteed to have
@@ -354,6 +401,7 @@ Guacamole.Layer = function(width, height) {
     this.drawImage = function(x, y, image) {
         if (layer.autosize) fitRect(x, y, image.width, image.height);
         context.drawImage(image, x, y);
+        drawScaledImage(x, y, image);
         empty = false;
     };
 

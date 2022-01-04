@@ -158,7 +158,8 @@ module.exports = {
         new webpack.ProvidePlugin({
             jstz: 'jstz',
             Pickr: '@simonwep/pickr',
-            saveAs: 'file-saver'
+            saveAs: 'file-saver',
+            tf: '@tensorflow/tfjs'
         })
 
     ],

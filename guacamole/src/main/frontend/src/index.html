@@ -94,6 +94,11 @@
 
         <!-- Core libraries that MUST be available at the global level (for use
         by extensions) -->
+        <!-- Import @tensorflow/tfjs or @tensorflow/tfjs-core -->
+        <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+
+        <!-- Adds the WASM backend to the global backend registry -->
+        <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm/dist/tf-backend-wasm.js"></script>
         <script type="text/javascript" src="guacamole-common-js/all.min.js"></script>
         <script type="text/javascript" src="jquery.min.js"></script>
         <script type="text/javascript" src="lodash.min.js"></script>
