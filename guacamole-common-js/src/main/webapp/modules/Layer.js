@@ -77,7 +77,7 @@ Guacamole.Layer = function(width, height) {
     var canvasScaled = document.createElement("canvas");
     const tileSize = 128;
     const numChannels = 3;
-    var dirtyRects = [];
+    var dirtyRects = {};
     /**
      * The 2D display context of the canvas element backing this Layer.
      *
@@ -146,33 +146,36 @@ Guacamole.Layer = function(width, height) {
         0xF: "lighter"
     };
 
-    var scheduleRedraw = function() {
-        const dirtyRect = dirtyRects.shift();
-        if (dirtyRect) {
-            tf.tidy(() => {
-            const image = context.getImageData(dirtyRect[0] * tileSize, dirtyRect[1] * tileSize, tileSize, tileSize);
-            let exampleLocal = tf.browser
-                .fromPixels(image,numChannels)
-                .cast("float32")
-                .div(255.0)
-                .expandDims(0)
-            const predictionLocal = Guacamole.scaleModel.execute({ input_1: exampleLocal }).clipByValue(0, 1).squeeze(0);
-            tf.browser.toPixels(
-                predictionLocal,
-                null
-                ).then(imageData => {
-                    // check if not dirty since
-                    if (dirtyRects.filter(r => r[0] === dirtyRect[0] && r[1] === dirtyRect[1]).length === 0) {
-                        contextScaled.putImageData(new ImageData(imageData, 2*tileSize, 2*tileSize), dirtyRect[0]*2*tileSize, dirtyRect[1]*2*tileSize);
-                    }
+    var scheduleRedraw = function(i,j) {
+        if (dirtyRects[i] && dirtyRects[i][j]) {
+            if (dirtyRects[i][j] + 500 < Date.now()) {
+            // enough time has elapsed, we can now redraw
+                const dirtyRect = dirtyRects[i];
+                dirtyRect[j] = 0;
+                dirtyRects[i] = dirtyRect;
+                tf.tidy(() => {
+                    const image = context.getImageData(i * tileSize, j * tileSize, tileSize, tileSize);
+                    let exampleLocal = tf.browser
+                        .fromPixels(image,numChannels)
+                        .cast("float32")
+                        .div(255.0)
+                        .expandDims(0)
+                    const predictionLocal = Guacamole.scaleModel.execute({ input_1: exampleLocal }).clipByValue(0, 1).squeeze(0);
+                    tf.browser.toPixels(
+                        predictionLocal,
+                        null
+                        ).then(imageData => {
+                            // check if not dirty since
+                            if (!(dirtyRects[i] && dirtyRects[i][j])) {
+                                contextScaled.putImageData(new ImageData(imageData, 2*tileSize, 2*tileSize), i*2*tileSize, j*2*tileSize);
+                            }
+                        });
                 });
-            });
-            if (dirtyRects.length > 0) {
-                tf.nextFrame().then(scheduleRedraw);
-                //window.setTimeout(scheduleRedraw, 0);
+            } else {
+                window.setTimeout(()=> {scheduleRedraw(i,j)}, 500);
             }
-            return 0;
         }
+        return 0;
     }
 
     var drawScaledImage =  function drawScaledImage(x, y, image) {
@@ -182,15 +185,14 @@ Guacamole.Layer = function(width, height) {
         const jLower = Math.floor(y / tileSize);
         const jUpper = Math.ceil((y + image.height) / tileSize);
 
-        dirtyRects = dirtyRects.filter(z => {
-            return !(z[0] <= iUpper && z[1] <= jUpper && z[0] >= iLower && z[1] >= jLower);
-        })
         for (let i=iLower; i<=iUpper; i++) {
             for (let j=jLower; j<=jUpper; j++) {
-                dirtyRects.push([i, j]);
+                const dirtyRect = dirtyRects[i] || {};
+                dirtyRect[j] = Date.now();
+                dirtyRects[i] = dirtyRect;
+                scheduleRedraw(i,j);
             }
         }
-        scheduleRedraw()
     };
     /**
      * Resizes the canvas element backing this Layer. This function should only
