@@ -65,7 +65,7 @@ Guacamole.Layer = function(width, height) {
      * @constant
      * @type {!number}
      */
-    var CANVAS_SIZE_FACTOR = 64;
+    var CANVAS_SIZE_FACTOR = 128;
 
     /**
      * The canvas element backing this Layer.
@@ -75,7 +75,9 @@ Guacamole.Layer = function(width, height) {
      */
     var canvas = document.createElement("canvas");
     var canvasScaled = document.createElement("canvas");
-    var numChannels = 3;
+    const tileSize = 128;
+    const numChannels = 3;
+    var dirtyRects = [];
     /**
      * The 2D display context of the canvas element backing this Layer.
      *
@@ -144,31 +146,51 @@ Guacamole.Layer = function(width, height) {
         0xF: "lighter"
     };
 
-    var drawScaledImage =  function drawScaledImage(x, y, image) {
-        contextScaled.drawImage(image, x * 2, y * 2, image.width * 2, image.height * 2);
-        const iMax = Math.ceil(image.width / 32.0);
-        const jMax = Math.ceil(image.height / 32.0);
-
-        if (iMax > 0 && jMax > 0) {
-            const lowRes = tf.browser
-                    .fromPixels(image,numChannels)
-                    .pad([[0, jMax * 32 - image.height],[0, iMax * 32 - image.width],[0,0]])
-                    .reshape([jMax,32, iMax, 32,numChannels])
-                    .transpose([0,2,1,3,4])
-                    .reshape([-1,32,32,numChannels])
-                    .cast("float32")
-                    .div(255.0);
-
-            Guacamole.scaleModel.executeAsync({ input_1: lowRes }).then(prediction => {
-                const predictionClipped = prediction.clipByValue(0, 1).reshape([jMax,iMax,64,64,numChannels]).transpose([0,2,1,3,4]).reshape([jMax*64,iMax*64,numChannels]).slice(0,[image.height * 2, image.width * 2]);
-                tf.browser.toPixels(
-                    predictionClipped,
-                    null
+    var scheduleRedraw = function() {
+        const dirtyRect = dirtyRects.shift();
+        if (dirtyRect) {
+            tf.tidy(() => {
+            const image = context.getImageData(dirtyRect[0] * tileSize, dirtyRect[1] * tileSize, tileSize, tileSize);
+            let exampleLocal = tf.browser
+                .fromPixels(image,numChannels)
+                .cast("float32")
+                .div(255.0)
+                .expandDims(0)
+            const predictionLocal = Guacamole.scaleModel.execute({ input_1: exampleLocal }).clipByValue(0, 1).squeeze(0);
+            tf.browser.toPixels(
+                predictionLocal,
+                null
                 ).then(imageData => {
-                    contextScaled.putImageData(new ImageData(imageData, image.width * 2, image.height * 2), x*2, y*2);
+                    // check if not dirty since
+                    if (dirtyRects.filter(r => r[0] === dirtyRect[0] && r[1] === dirtyRect[1]).length === 0) {
+                        contextScaled.putImageData(new ImageData(imageData, 2*tileSize, 2*tileSize), dirtyRect[0]*2*tileSize, dirtyRect[1]*2*tileSize);
+                    }
                 });
             });
+            if (dirtyRects.length > 0) {
+                tf.nextFrame().then(scheduleRedraw);
+                //window.setTimeout(scheduleRedraw, 0);
+            }
+            return 0;
         }
+    }
+
+    var drawScaledImage =  function drawScaledImage(x, y, image) {
+        contextScaled.drawImage(image, x * 2, y * 2, image.width * 2, image.height * 2);
+        const iLower = Math.floor(x / tileSize);
+        const iUpper = Math.ceil((x + image.width) / tileSize);
+        const jLower = Math.floor(y / tileSize);
+        const jUpper = Math.ceil((y + image.height) / tileSize);
+
+        dirtyRects = dirtyRects.filter(z => {
+            return !(z[0] <= iUpper && z[1] <= jUpper && z[0] >= iLower && z[1] >= jLower);
+        })
+        for (let i=iLower; i<=iUpper; i++) {
+            for (let j=jLower; j<=jUpper; j++) {
+                dirtyRects.push([i, j]);
+            }
+        }
+        scheduleRedraw()
     };
     /**
      * Resizes the canvas element backing this Layer. This function should only
