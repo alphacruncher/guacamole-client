@@ -78,6 +78,8 @@ Guacamole.Layer = function(width, height) {
     const tileSize = 128;
     const numChannels = 3;
     var dirtyRects = {};
+    var numDirtyRects = 0;
+    var nextRecalc = 0;
     /**
      * The 2D display context of the canvas element backing this Layer.
      *
@@ -147,11 +149,14 @@ Guacamole.Layer = function(width, height) {
     };
 
     var scheduleRedraw = function(i,j) {
+        var delay = 10 * numDirtyRects;
+        delay = 0;
         if (dirtyRects[i] && dirtyRects[i][j]) {
-            if (dirtyRects[i][j] + 500 < Date.now()) {
+            if (dirtyRects[i][j] + delay < Date.now()) {
             // enough time has elapsed, we can now redraw
                 const dirtyRect = dirtyRects[i];
                 dirtyRect[j] = 0;
+                numDirtyRects--;
                 dirtyRects[i] = dirtyRect;
                 tf.tidy(() => {
                     const image = context.getImageData(i * tileSize, j * tileSize, tileSize, tileSize);
@@ -172,7 +177,7 @@ Guacamole.Layer = function(width, height) {
                         });
                 });
             } else {
-                window.setTimeout(()=> {scheduleRedraw(i,j)}, 500);
+                window.setTimeout(()=> {scheduleRedraw(i,j)}, delay);
             }
         }
         return 0;
@@ -182,15 +187,25 @@ Guacamole.Layer = function(width, height) {
         contextScaled.drawImage(image, x * 2, y * 2, image.width * 2, image.height * 2);
         const iLower = Math.floor(x / tileSize);
         const iUpper = Math.ceil((x + image.width) / tileSize);
+        // const iMid = Math.floor(0.5*iLower + 0.5*iUpper);
         const jLower = Math.floor(y / tileSize);
         const jUpper = Math.ceil((y + image.height) / tileSize);
+        // const jMid = Math.floor(0.5*jLower + 0.5*jUpper);
 
+        const totalNewDirty = Math.max(50, (iUpper - iLower + 1) * (jUpper - jLower + 1));
+        var scheduleTime = 0;
         for (let i=iLower; i<=iUpper; i++) {
             for (let j=jLower; j<=jUpper; j++) {
+                scheduleTime++;
+                if (!dirtyRects[i] || !dirtyRects[i][j]) {
+                    // wasn't dirty before, now yes, let's increase the count
+                    numDirtyRects++;
+                }
                 const dirtyRect = dirtyRects[i] || {};
-                dirtyRect[j] = Date.now();
+                const timeOffset = 3 * scheduleTime / totalNewDirty * 1000;
+                dirtyRect[j] = Date.now() + timeOffset;
                 dirtyRects[i] = dirtyRect;
-                scheduleRedraw(i,j);
+                window.setTimeout(()=> {scheduleRedraw(i,j)}, 0);
             }
         }
     };
