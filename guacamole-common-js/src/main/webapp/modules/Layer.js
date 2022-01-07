@@ -78,8 +78,9 @@ Guacamole.Layer = function(width, height) {
     const tileSize = 128;
     const numChannels = 3;
     var dirtyRects = {};
-    var numDirtyRects = 0;
     var nextRecalc = 0;
+    var recalcFactor = 2.5;
+    var lastDirty = Date.now();
     /**
      * The 2D display context of the canvas element backing this Layer.
      *
@@ -149,16 +150,16 @@ Guacamole.Layer = function(width, height) {
     };
 
     var scheduleRedraw = function(i,j) {
-        var delay = 10 * numDirtyRects;
-        delay = 0;
         if (dirtyRects[i] && dirtyRects[i][j]) {
-            if (dirtyRects[i][j] + delay < Date.now()) {
+            if (Date.now() > nextRecalc) {
+
             // enough time has elapsed, we can now redraw
                 const dirtyRect = dirtyRects[i];
                 dirtyRect[j] = 0;
-                numDirtyRects--;
                 dirtyRects[i] = dirtyRect;
                 tf.tidy(() => {
+                    const startTime = Date.now();
+
                     const image = context.getImageData(i * tileSize, j * tileSize, tileSize, tileSize);
                     let exampleLocal = tf.browser
                         .fromPixels(image,numChannels)
@@ -166,6 +167,9 @@ Guacamole.Layer = function(width, height) {
                         .div(255.0)
                         .expandDims(0)
                     const predictionLocal = Guacamole.scaleModel.execute({ input_1: exampleLocal }).clipByValue(0, 1).squeeze(0);
+                    recalcFactor = 2 + Math.exp(-2 * (Date.now() - lastDirty) / 1000) * Math.max(recalcFactor - 2, 0);
+                    console.log(recalcFactor)
+                    nextRecalc = recalcFactor * Date.now() - (recalcFactor - 1) * startTime;
                     tf.browser.toPixels(
                         predictionLocal,
                         null
@@ -177,7 +181,7 @@ Guacamole.Layer = function(width, height) {
                         });
                 });
             } else {
-                window.setTimeout(()=> {scheduleRedraw(i,j)}, delay);
+                window.setTimeout(()=> {scheduleRedraw(i,j)}, 0);
             }
         }
         return 0;
@@ -192,20 +196,15 @@ Guacamole.Layer = function(width, height) {
         const jUpper = Math.ceil((y + image.height) / tileSize);
         // const jMid = Math.floor(0.5*jLower + 0.5*jUpper);
 
-        const totalNewDirty = Math.max(50, (iUpper - iLower + 1) * (jUpper - jLower + 1));
-        var scheduleTime = 0;
+        const totalNewDirty = (iUpper - iLower + 1) * (jUpper - jLower + 1);
+        recalcFactor = Math.min(recalcFactor + totalNewDirty / 5 , 6);
+        lastDirty = Date.now();
         for (let i=iLower; i<=iUpper; i++) {
             for (let j=jLower; j<=jUpper; j++) {
-                scheduleTime++;
-                if (!dirtyRects[i] || !dirtyRects[i][j]) {
-                    // wasn't dirty before, now yes, let's increase the count
-                    numDirtyRects++;
-                }
                 const dirtyRect = dirtyRects[i] || {};
-                const timeOffset = 3 * scheduleTime / totalNewDirty * 1000;
-                dirtyRect[j] = Date.now() + timeOffset;
+                dirtyRect[j] = Date.now();
                 dirtyRects[i] = dirtyRect;
-                window.setTimeout(()=> {scheduleRedraw(i,j)}, 0);
+                scheduleRedraw(i,j)
             }
         }
     };
