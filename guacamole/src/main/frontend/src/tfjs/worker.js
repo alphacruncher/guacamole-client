@@ -2,6 +2,11 @@
 var scaleModel;
 importScripts('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs/dist/tf.min.js')
 importScripts('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm/dist/tf-backend-wasm.js')
+importScripts('https://cdnjs.cloudflare.com/ajax/libs/immutable/4.0.0/immutable.min.js')
+
+a = Immutable.OrderedSet([1,2,3]);
+console.log(a);
+
 const worker = self;
 
 class DirtyRectsQueue {
