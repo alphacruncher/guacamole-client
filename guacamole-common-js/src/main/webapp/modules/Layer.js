@@ -24,7 +24,7 @@ tf.wasm.setWasmPaths(
 );
 
 tf.setBackend('webgl').then(() => {
-    tf.loadGraphModel("/app/tfjs/model.json").then(model => {
+    tf.loadGraphModel("/tfjs/model.json").then(model => {
         Guacamole.scaleModel = model;
     });
 });
@@ -65,7 +65,7 @@ Guacamole.Layer = function(width, height) {
      * @constant
      * @type {!number}
      */
-    var CANVAS_SIZE_FACTOR = 128;
+    var CANVAS_SIZE_FACTOR = 64;
 
     /**
      * The canvas element backing this Layer.
@@ -75,12 +75,11 @@ Guacamole.Layer = function(width, height) {
      */
     var canvas = document.createElement("canvas");
     var canvasScaled = document.createElement("canvas");
-    const tileSize = 128;
+    const tileSize = CANVAS_SIZE_FACTOR;
     const numChannels = 3;
-    var dirtyRects = {};
-    var nextRecalc = 0;
+    var dirtyRects = [];
     var recalcFactor = 2.5;
-    var lastDirty = Date.now();
+    const worker = new Worker('/tfjs/worker.js' );
     /**
      * The 2D display context of the canvas element backing this Layer.
      *
@@ -149,43 +148,16 @@ Guacamole.Layer = function(width, height) {
         0xF: "lighter"
     };
 
-    var scheduleRedraw = function(i,j) {
-        if (dirtyRects[i] && dirtyRects[i][j]) {
-            if (Date.now() > nextRecalc) {
-
-            // enough time has elapsed, we can now redraw
-                const dirtyRect = dirtyRects[i];
-                dirtyRect[j] = 0;
-                dirtyRects[i] = dirtyRect;
-                tf.tidy(() => {
-                    const startTime = Date.now();
-
-                    const image = context.getImageData(i * tileSize, j * tileSize, tileSize, tileSize);
-                    let exampleLocal = tf.browser
-                        .fromPixels(image,numChannels)
-                        .cast("float32")
-                        .div(255.0)
-                        .expandDims(0)
-                    const predictionLocal = Guacamole.scaleModel.execute({ input_1: exampleLocal }).clipByValue(0, 1).squeeze(0);
-                    recalcFactor = 2 + Math.exp(-2 * (Date.now() - lastDirty) / 1000) * Math.max(recalcFactor - 2, 0);
-                    console.log(recalcFactor)
-                    nextRecalc = recalcFactor * Date.now() - (recalcFactor - 1) * startTime;
-                    tf.browser.toPixels(
-                        predictionLocal,
-                        null
-                        ).then(imageData => {
-                            // check if not dirty since
-                            if (!(dirtyRects[i] && dirtyRects[i][j])) {
-                                contextScaled.putImageData(new ImageData(imageData, 2*tileSize, 2*tileSize), i*2*tileSize, j*2*tileSize);
-                            }
-                        });
-                });
-            } else {
-                window.setTimeout(()=> {scheduleRedraw(i,j)}, 0);
-            }
+    var drawRectFromWorker = function(e) {
+        const imageData = new ImageData( 2*tileSize, 2*tileSize);
+        imageData.data.set(new Uint8ClampedArray(e.data.pixels));
+        const dirtyRect = dirtyRects.find(rect => rect.i === e.data.i && rect.j === e.data.j);
+        if (e.data.dirtyTime >= dirtyRect.dirtyTime) {
+            contextScaled.putImageData(imageData, e.data.i*2*tileSize, e.data.j*2*tileSize);
         }
-        return 0;
     }
+
+    worker.addEventListener( 'message', ( evt ) => drawRectFromWorker( evt ) );
 
     var drawScaledImage =  function drawScaledImage(x, y, image) {
         contextScaled.drawImage(image, x * 2, y * 2, image.width * 2, image.height * 2);
@@ -197,14 +169,22 @@ Guacamole.Layer = function(width, height) {
         // const jMid = Math.floor(0.5*jLower + 0.5*jUpper);
 
         const totalNewDirty = (iUpper - iLower + 1) * (jUpper - jLower + 1);
-        recalcFactor = Math.min(recalcFactor + totalNewDirty / 5 , 6);
-        lastDirty = Date.now();
-        for (let i=iLower; i<=iUpper; i++) {
+        recalcFactor = Math.min(recalcFactor + Math.max(totalNewDirty  - 20, 0)/ 5 , 10);
+        const dirtyTime = Date.now();
+        for (let i=iUpper; i>=iLower; i--) {
             for (let j=jLower; j<=jUpper; j++) {
-                const dirtyRect = dirtyRects[i] || {};
-                dirtyRect[j] = Date.now();
-                dirtyRects[i] = dirtyRect;
-                scheduleRedraw(i,j)
+                worker.postMessage( {
+                    pixels: context.getImageData(i*tileSize, j*tileSize,tileSize, tileSize).data.buffer,
+                    i,
+                    j,
+                    dirtyTime
+                })
+                const index = dirtyRects.findIndex(rect => rect.i === i && rect.j === j)
+                if (index < 0) {
+                    dirtyRects.push({i,j, dirtyTime});
+                } else {
+                    dirtyRects[index].dirtyTime = dirtyTime
+                }
             }
         }
     };

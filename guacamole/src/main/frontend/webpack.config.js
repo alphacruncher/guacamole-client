@@ -119,6 +119,7 @@ module.exports = {
         new CopyPlugin([
             { from: 'app/**/*' },
             { from: 'fonts/**/*' },
+            { from: 'tfjs/**/*' },
             { from: 'images/**/*' },
             { from: 'layouts/**/*' },
             { from: 'translations/**/*' },
