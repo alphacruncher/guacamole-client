@@ -2,16 +2,13 @@
 var scaleModel;
 importScripts('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs/dist/tf.min.js')
 importScripts('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm/dist/tf-backend-wasm.js')
-importScripts('https://cdnjs.cloudflare.com/ajax/libs/immutable/4.0.0/immutable.min.js')
-
-a = Immutable.OrderedSet([1,2,3]);
-console.log(a);
 
 const worker = self;
 
 class DirtyRectsQueue {
     constructor() {
         this.queue = [];
+        this.priority = [];
         this.push = this.push.bind(this);
         this.tryNext = this.tryNext.bind(this);
         this.scaleModel = null;
@@ -25,14 +22,19 @@ class DirtyRectsQueue {
             });    
     }
 
-    push(i,j, pixels, dirtyTime) {
+    push(i,j, pixels, dirtyTime, priority) {
         const index = this.queue.findIndex(rect => rect.i === i && rect.j === j)
-        if (index < 0) {
-            this.queue.push({i,j, pixels, dirtyTime});
-        } else {
-            this.queue[index].pixels = pixels
-            this.queue[index].dirtyTime = dirtyTime
+        var element = {i,j, pixels, dirtyTime}
+        if (index >= 0) {
+            this.queue.splice(index, 1);
+            this.priority.splice(index, 1);  
         }
+        var insertIndex = 0
+        while (this.priority[insertIndex] < priority && insertIndex < this.priority.length) {
+            insertIndex += 1;
+        }
+        this.queue.splice(insertIndex, 0, element);
+        this.priority.splice(insertIndex, 0, priority);
         setTimeout(this.tryNext, 0);
     }
 
@@ -40,7 +42,7 @@ class DirtyRectsQueue {
         if (this.queue.length === 0) {
             return;
         } 
-        if (!this.scaleModel || this.numReceived - this.numSent > 20) {
+        if (!this.scaleModel || this.numReceived - this.numSent > 10) {
             setTimeout(this.tryNext, 0);
             return;
         }
@@ -79,6 +81,21 @@ const requestsQueue = new DirtyRectsQueue();
 
 onmessage = function(e) {
     tf.ready().then(() => {
-        requestsQueue.push(e.data.i, e.data.j, e.data.pixels, e.data.dirtyTime);
+        const view = new Uint8Array(e.data.pixels);
+        var meanR = 0;
+        var meanRsq = 0;
+        var meanG = 0;
+        var meanGsq = 0;
+        var meanB = 0;
+        var meanBsq = 0;
+        for (let i=0; i< view.length; i+=4) {
+            meanR += view[i] / view.length;
+            meanRsq += view[i] * view[i] / view.length;
+            meanG += view[i+1] / view.length;
+            meanGsq += view[i+1] * view[i+1] / view.length;
+            meanB += view[i+2] / view.length;
+            meanBsq += view[i+2] * view[i+2] / view.length;
+        }
+        requestsQueue.push(e.data.i, e.data.j, e.data.pixels, e.data.dirtyTime, meanRsq + meanGsq + meanBsq - meanR**2 - meanG**2 - meanB**2);
     });
   }
