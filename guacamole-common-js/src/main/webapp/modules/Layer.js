@@ -160,7 +160,30 @@ Guacamole.Layer = function(width, height) {
     worker.addEventListener( 'message', ( evt ) => drawRectFromWorker( evt ) );
 
     var drawScaledImage =  function drawScaledImage(x, y, image) {
-        contextScaled.drawImage(image, x * 2, y * 2, image.width * 2, image.height * 2);
+        const imageUnscaled = new Uint8ClampedArray(context.getImageData(x,y, image.width, image.height).data.buffer);
+        const imageScaled = new Uint8ClampedArray(4*imageUnscaled.length);
+        for (let j=0; j < image.height; j+=1) {
+            for (let i = 0; i < image.width; i+=1) {
+                const bufferedStart = (i+j*image.width)*4;
+                let r = imageUnscaled[bufferedStart];
+                let g = imageUnscaled[bufferedStart+1];
+                let b = imageUnscaled[bufferedStart+2];
+                let a = imageUnscaled[bufferedStart+3];
+                for (let k =0; k < 2; k+=1) {
+                    for (let l =0; l < 2; l+=1) {                
+                        let bufferedScaledStart = (i*2+j*image.width*4)*4 + k* image.width * 2 * 4 + l*4;
+                        imageScaled[bufferedScaledStart] = r
+                        imageScaled[bufferedScaledStart+ 1] = g
+                        imageScaled[bufferedScaledStart + 2] = b
+                        imageScaled[bufferedScaledStart + 3] = a
+                    }
+                }
+
+            }
+        }
+
+        const scaledImageData = new ImageData(imageScaled, 2*image.width, 2*image.height);
+        contextScaled.putImageData(scaledImageData, x * 2, y * 2);
         const iLower = Math.floor(x / tileSize);
         const iUpper = Math.ceil((x + image.width) / tileSize);
         // const iMid = Math.floor(0.5*iLower + 0.5*iUpper);

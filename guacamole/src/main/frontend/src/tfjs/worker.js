@@ -17,7 +17,6 @@ class DirtyRectsQueue {
         tf.setBackend('webgl').then(() => {
                 tf.loadGraphModel("/tfjs/model.json").then(model => {
                     this.scaleModel = model;
-                    console.log(this.scaleModel);
                 });
             });    
     }
@@ -42,12 +41,13 @@ class DirtyRectsQueue {
         if (this.queue.length === 0) {
             return;
         } 
-        if (!this.scaleModel || this.numReceived - this.numSent > 10) {
+        if (!this.scaleModel || this.numReceived - this.numSent > 3) {
             setTimeout(this.tryNext, 0);
             return;
         }
 
         const queueItem = this.queue.pop();
+        this.priority.pop();
         this.numReceived += 1;
 
         let pixels = new ImageData( 64, 64 );
