@@ -1589,28 +1589,11 @@ Guacamole.Display.VisibleLayer = function(width, height) {
     this.children = {};
 
     // Set layer position
-    var canvas = layer.getCanvas();
-    canvas.style.position = "absolute";
-    canvas.style.left = "0px";
-    canvas.style.top = "0px";
-    canvas.style.zIndex = "-1";
-
-    var canvasScaled = layer.getCanvasScaled();
-    canvasScaled.style.position = "absolute";
-    canvasScaled.style.left = "0px";
-    canvasScaled.style.top = "0px";
-    canvasScaled.style.transform =
-    canvasScaled.style.WebkitTransform =
-    canvasScaled.style.MozTransform =
-    canvasScaled.style.OTransform =
-    canvasScaled.style.msTransform =
-            "scale(0.5, 0.5)";
-    canvasScaled.style.transformOrigin = "top left";
+    var layerDiv = layer.getDiv();
 
     // Create div with given size
     var div = document.createElement("div");
-    div.appendChild(canvas);
-    div.appendChild(canvasScaled);
+    div.appendChild(layerDiv);
     div.style.width = width + "px";
     div.style.height = height + "px";
     div.style.position = "absolute";

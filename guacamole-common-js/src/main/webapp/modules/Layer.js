@@ -19,16 +19,6 @@
 
 var Guacamole = Guacamole || {};
 
-tf.wasm.setWasmPaths(
-    'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm/dist/'
-);
-
-tf.setBackend('webgl').then(() => {
-    tf.loadGraphModel("/tfjs/model.json").then(model => {
-        Guacamole.scaleModel = model;
-    });
-});
-
 /**
  * Abstract ordered drawing surface. Each Layer contains a canvas element and
  * provides simple drawing instructions for drawing to that canvas element,
@@ -73,13 +63,74 @@ Guacamole.Layer = function(width, height) {
      * @private
      * @type {!HTMLCanvasElement}
      */
-    var canvas = document.createElement("canvas");
-    var canvasScaled = document.createElement("canvas");
+
     const tileSize = CANVAS_SIZE_FACTOR;
-    const numChannels = 3;
+    const scaleFactor = 2;
+
+    var div = document.createElement("div");
+    div.style.width = scaleFactor * width + "px";
+    div.style.height = scaleFactor * height + "px";
+    div.style.position = "absolute";
+    div.style.left = "0px";
+    div.style.top = "0px";
+    div.style.overflow = "hidden";
+
+    div.style.transformOrigin = "top left";
+
+
+    var canvas = document.createElement("canvas");
+    canvas.style.position = "absolute";
+    canvas.style.left = "0px";
+    canvas.style.top = "0px";
+
+    canvas.style.transformOrigin = "top left";
+    canvas.style.imageRendering = "pixelated";
+    div.appendChild(canvas);
+
     var dirtyRects = [];
-    var recalcFactor = 2.5;
     const worker = new Worker('/tfjs/worker.js' );
+
+    var xTiles = 0;
+    var yTiles = 0;
+
+    var scaledTiles = []
+    var scaledContexts = []
+    
+    var addTiles = function() {
+        xTiles = Math.ceil(layer.width / tileSize);
+        yTiles = Math.ceil(layer.height / tileSize);
+        const totalTiles = scaledTiles.length;
+        for (let t = 0; t<totalTiles; t++) {
+            const tile = scaledTiles.pop();
+            scaledContexts.pop();
+            tile.remove();
+        }
+        for (let j = 0; j < yTiles; j++) {
+            for (let i = 0; i < xTiles; i++) {
+                var canvasTile = document.createElement("canvas");
+                canvasTile.width = scaleFactor * tileSize;;
+                canvasTile.height = scaleFactor * tileSize;
+                const contextTile = canvasTile.getContext('2d');
+                scaledContexts.push(contextTile)
+                div.appendChild(canvasTile);
+                canvasTile.style.position = "absolute";
+                canvasTile.style.left = `${i*tileSize}px`;
+                canvasTile.style.top = `${j*tileSize}px`;
+                canvasTile.style.width = `${scaleFactor*tileSize}px`;
+                canvasTile.style.height = `${scaleFactor*tileSize}px`;
+                canvasTile.style.transform =
+                canvasTile.style.WebkitTransform =
+                canvasTile.style.MozTransform =
+                canvasTile.style.OTransform =
+                canvasTile.style.msTransform =
+                        `scale(${1.0/scaleFactor}, ${1.0/scaleFactor})`;
+                canvasTile.style.transformOrigin = "top left";
+                canvasTile.style.zIndex = "-1"
+                scaledTiles.push(canvasTile);
+            }
+        }
+    }
+
     /**
      * The 2D display context of the canvas element backing this Layer.
      *
@@ -87,9 +138,7 @@ Guacamole.Layer = function(width, height) {
      * @type {!CanvasRenderingContext2D}
      */
     var context = canvas.getContext("2d");
-    var contextScaled = canvasScaled.getContext("2d");
     context.save();
-    contextScaled.save();
 
     /**
      * Whether the layer has not yet been drawn to. Once any draw operation
@@ -149,53 +198,27 @@ Guacamole.Layer = function(width, height) {
     };
 
     var drawRectFromWorker = function(e) {
-        const imageData = new ImageData( 2*tileSize, 2*tileSize);
+        const imageData = new ImageData( scaleFactor*tileSize, scaleFactor*tileSize);
         imageData.data.set(new Uint8ClampedArray(e.data.pixels));
         const dirtyRect = dirtyRects.find(rect => rect.i === e.data.i && rect.j === e.data.j);
         if (e.data.dirtyTime >= dirtyRect.dirtyTime) {
-            contextScaled.putImageData(imageData, e.data.i*2*tileSize, e.data.j*2*tileSize);
+            scaledContexts[e.data.i + e.data.j * xTiles].putImageData(imageData, 0, 0);
+            scaledTiles[e.data.i + e.data.j * xTiles].style.zIndex = "1";
         }
     }
 
     worker.addEventListener( 'message', ( evt ) => drawRectFromWorker( evt ) );
 
     var drawScaledImage =  function drawScaledImage(x, y, image) {
-        const imageUnscaled = new Uint8ClampedArray(context.getImageData(x,y, image.width, image.height).data.buffer);
-        const imageScaled = new Uint8ClampedArray(4*imageUnscaled.length);
-        for (let j=0; j < image.height; j+=1) {
-            for (let i = 0; i < image.width; i+=1) {
-                const bufferedStart = (i+j*image.width)*4;
-                let r = imageUnscaled[bufferedStart];
-                let g = imageUnscaled[bufferedStart+1];
-                let b = imageUnscaled[bufferedStart+2];
-                let a = imageUnscaled[bufferedStart+3];
-                for (let k =0; k < 2; k+=1) {
-                    for (let l =0; l < 2; l+=1) {                
-                        let bufferedScaledStart = (i*2+j*image.width*4)*4 + k* image.width * 2 * 4 + l*4;
-                        imageScaled[bufferedScaledStart] = r
-                        imageScaled[bufferedScaledStart+ 1] = g
-                        imageScaled[bufferedScaledStart + 2] = b
-                        imageScaled[bufferedScaledStart + 3] = a
-                    }
-                }
-
-            }
-        }
-
-        const scaledImageData = new ImageData(imageScaled, 2*image.width, 2*image.height);
-        contextScaled.putImageData(scaledImageData, x * 2, y * 2);
         const iLower = Math.floor(x / tileSize);
-        const iUpper = Math.ceil((x + image.width) / tileSize);
-        // const iMid = Math.floor(0.5*iLower + 0.5*iUpper);
+        const iUpper = Math.floor((x + image.width -1) / tileSize);
         const jLower = Math.floor(y / tileSize);
-        const jUpper = Math.ceil((y + image.height) / tileSize);
-        // const jMid = Math.floor(0.5*jLower + 0.5*jUpper);
+        const jUpper = Math.floor((y + image.height -1) / tileSize);
 
-        const totalNewDirty = (iUpper - iLower + 1) * (jUpper - jLower + 1);
-        recalcFactor = Math.min(recalcFactor + Math.max(totalNewDirty  - 20, 0)/ 5 , 10);
         const dirtyTime = Date.now();
         for (let i=iUpper; i>=iLower; i--) {
             for (let j=jLower; j<=jUpper; j++) {
+                scaledTiles[j*xTiles+i].style.zIndex = "-2";
                 worker.postMessage( {
                     pixels: context.getImageData(i*tileSize, j*tileSize,tileSize, tileSize).data.buffer,
                     i,
@@ -223,7 +246,6 @@ Guacamole.Layer = function(width, height) {
      *     The new height to assign to this Layer.
      */
     var resize = function resize(newWidth, newHeight) {
-
         // Default size to zero
         newWidth = newWidth || 0;
         newHeight = newHeight || 0;
@@ -259,8 +281,8 @@ Guacamole.Layer = function(width, height) {
             // Resize canvas
             canvas.width = canvasWidth;
             canvas.height = canvasHeight;
-            canvasScaled.width = 2*canvasWidth;
-            canvasScaled.height = 2*canvasHeight;
+            div.style.width = `${canvas.width}px`;
+            div.style.height = `${canvas.height}px`;
 
             // Redraw old data, if any
             if (oldData) {
@@ -286,6 +308,8 @@ Guacamole.Layer = function(width, height) {
         // Assign new layer dimensions
         layer.width = newWidth;
         layer.height = newHeight;
+
+        addTiles();
 
     };
 
@@ -370,6 +394,7 @@ Guacamole.Layer = function(width, height) {
      */
     this.height = height;
 
+    addTiles();
     /**
      * Returns the canvas element backing this Layer. Note that the dimensions
      * of the canvas may not exactly match those of the Layer, as resizing a
@@ -382,9 +407,9 @@ Guacamole.Layer = function(width, height) {
         return canvas;
     };
 
-    this.getCanvasScaled = function getCanvas() {
-        return canvasScaled;
-    };
+    this.getDiv = function getDiv() {
+        return div;
+    }
 
     /**
      * Returns a new canvas element containing the same image as this Layer.
