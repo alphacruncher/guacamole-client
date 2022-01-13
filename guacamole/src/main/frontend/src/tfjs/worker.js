@@ -88,16 +88,19 @@ onmessage = function(e) {
         var meanGsq = 0;
         var meanB = 0;
         var meanBsq = 0;
-        for (let i=0; i< view.length; i+=4) {
-            meanR += view[i] / view.length;
-            meanRsq += view[i] * view[i] / view.length;
-            meanG += view[i+1] / view.length;
-            meanGsq += view[i+1] * view[i+1] / view.length;
-            meanB += view[i+2] / view.length;
-            meanBsq += view[i+2] * view[i+2] / view.length;
+        const stepSize = 4;
+        const numChannels = 4;
+        const denominator = view.length / stepSize / numChannels;
+        for (let i=0; i< view.length; i+=(numChannels*stepSize)) {
+            meanR += view[i] / denominator;
+            meanRsq += view[i] * view[i] / denominator;
+            meanG += view[i+1] / denominator;
+            meanGsq += view[i+1] * view[i+1] / denominator;
+            meanB += view[i+2] / denominator;
+            meanBsq += view[i+2] * view[i+2] / denominator;
         }
         const priority = meanRsq + meanGsq + meanBsq - meanR**2 - meanG**2 - meanB**2
-        if (priority > 100) {
+        if (priority > 1) {
             requestsQueue.push(e.data.i, e.data.j, e.data.pixels, e.data.dirtyTime, priority);
         }
         //requestsQueue.push(e.data.i, e.data.j, e.data.pixels, e.data.dirtyTime,  e.data.dirtyTime);

@@ -88,7 +88,9 @@ Guacamole.Layer = function(width, height) {
     div.appendChild(canvas);
 
     var dirtyRects = [];
-    const worker = new Worker('/tfjs/worker.js' );
+    const doScaling = window.chrome && window.devicePixelRatio == 2;
+    
+    const worker = doScaling ? new Worker('/tfjs/worker.js' ) : null;
 
     var xTiles = 0;
     var yTiles = 0;
@@ -97,6 +99,9 @@ Guacamole.Layer = function(width, height) {
     var scaledContexts = []
     
     var addTiles = function() {
+        if (!doScaling) {
+            return
+        }
         xTiles = Math.ceil(layer.width / tileSize);
         yTiles = Math.ceil(layer.height / tileSize);
         const totalTiles = scaledTiles.length;
@@ -207,9 +212,14 @@ Guacamole.Layer = function(width, height) {
         }
     }
 
-    worker.addEventListener( 'message', ( evt ) => drawRectFromWorker( evt ) );
+    if (doScaling) {
+        worker.addEventListener( 'message', ( evt ) => drawRectFromWorker( evt ) );
+    }
 
     var drawScaledImage =  function drawScaledImage(x, y, image) {
+        if (!doScaling) {
+            return
+        }
         const iLower = Math.floor(x / tileSize);
         const iUpper = Math.floor((x + image.width -1) / tileSize);
         const jLower = Math.floor(y / tileSize);
