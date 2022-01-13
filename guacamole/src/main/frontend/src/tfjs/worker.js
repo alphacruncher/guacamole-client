@@ -41,7 +41,7 @@ class DirtyRectsQueue {
         if (this.queue.length === 0) {
             return;
         } 
-        if (!this.scaleModel || this.numReceived - this.numSent > 3) {
+        if (!this.scaleModel || this.numReceived - this.numSent > 1) {
             setTimeout(this.tryNext, 0);
             return;
         }
@@ -96,6 +96,10 @@ onmessage = function(e) {
             meanB += view[i+2] / view.length;
             meanBsq += view[i+2] * view[i+2] / view.length;
         }
-        requestsQueue.push(e.data.i, e.data.j, e.data.pixels, e.data.dirtyTime, meanRsq + meanGsq + meanBsq - meanR**2 - meanG**2 - meanB**2);
+        const priority = meanRsq + meanGsq + meanBsq - meanR**2 - meanG**2 - meanB**2
+        if (priority > 100) {
+            requestsQueue.push(e.data.i, e.data.j, e.data.pixels, e.data.dirtyTime, priority);
+        }
+        //requestsQueue.push(e.data.i, e.data.j, e.data.pixels, e.data.dirtyTime,  e.data.dirtyTime);
     });
   }
