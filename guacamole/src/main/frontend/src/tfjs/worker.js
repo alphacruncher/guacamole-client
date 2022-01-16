@@ -1,9 +1,10 @@
 
-var scaleModel;
 importScripts('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs/dist/tf.min.js')
 importScripts('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm/dist/tf-backend-wasm.js')
 
 const worker = self;
+var scaleFactor = 2.0;
+var scaleModel = null;
 
 class DirtyRectsQueue {
     constructor() {
@@ -11,14 +12,8 @@ class DirtyRectsQueue {
         this.priority = [];
         this.push = this.push.bind(this);
         this.tryNext = this.tryNext.bind(this);
-        this.scaleModel = null;
         this.numReceived = 0;
-        this.numSent = 0;
-        tf.setBackend('webgl').then(() => {
-                tf.loadGraphModel("/tfjs/model.json").then(model => {
-                    this.scaleModel = model;
-                });
-            });    
+        this.numSent = 0;   
     }
 
     push(i,j, pixels, dirtyTime, priority) {
@@ -41,7 +36,7 @@ class DirtyRectsQueue {
         if (this.queue.length === 0) {
             return;
         } 
-        if (!this.scaleModel || this.numReceived - this.numSent > 1) {
+        if (!scaleModel || this.numReceived - this.numSent > 1) {
             setTimeout(this.tryNext, 0);
             return;
         }
@@ -50,7 +45,7 @@ class DirtyRectsQueue {
         this.priority.pop();
         this.numReceived += 1;
 
-        let pixels = new ImageData( 64, 64 );
+        let pixels = new ImageData( 128, 128 );
         pixels.data.set( new Uint8ClampedArray( queueItem.pixels ) );
         tf.tidy(() => {
             const exampleLocal = tf.browser
@@ -58,8 +53,9 @@ class DirtyRectsQueue {
                     .cast("float32")
                     .div(255.0)
                     .expandDims(0)
-            if (this.scaleModel) {
-                const predictionLocal = this.scaleModel.predict({ input_1: exampleLocal });
+
+            if (scaleModel) {
+                const predictionLocal = scaleModel.predict({ input_1: exampleLocal });
                 const predictionClippedLocal = predictionLocal.clipByValue(0, 1).squeeze(0)
                 tf.browser.toPixels(
                     predictionClippedLocal,
@@ -80,6 +76,14 @@ class DirtyRectsQueue {
 const requestsQueue = new DirtyRectsQueue();
 
 onmessage = function(e) {
+    if (e.data.isInit) {
+        tf.setBackend(e.data.modelType || 'webgl');
+        scaleFactor = e.data.scaleFactor || 2.0;
+        tf.loadGraphModel(`/tfjs/scale_${scaleFactor * 100}/model.json`).then(model => {
+            scaleModel = model;
+        });
+        return;
+    }
     tf.ready().then(() => {
         const view = new Uint8Array(e.data.pixels);
         var meanR = 0;
@@ -103,6 +107,5 @@ onmessage = function(e) {
         if (priority > 1) {
             requestsQueue.push(e.data.i, e.data.j, e.data.pixels, e.data.dirtyTime, priority);
         }
-        //requestsQueue.push(e.data.i, e.data.j, e.data.pixels, e.data.dirtyTime,  e.data.dirtyTime);
     });
   }

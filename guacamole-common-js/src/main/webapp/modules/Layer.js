@@ -55,7 +55,7 @@ Guacamole.Layer = function(width, height) {
      * @constant
      * @type {!number}
      */
-    var CANVAS_SIZE_FACTOR = 64;
+    var CANVAS_SIZE_FACTOR = 128;
 
     /**
      * The canvas element backing this Layer.
@@ -65,7 +65,7 @@ Guacamole.Layer = function(width, height) {
      */
 
     const tileSize = CANVAS_SIZE_FACTOR;
-    const scaleFactor = 2;
+    const scaleFactor = 2 || window.devicePixelRatio;
 
     var div = document.createElement("div");
     div.style.width = scaleFactor * width + "px";
@@ -85,56 +85,40 @@ Guacamole.Layer = function(width, height) {
 
     canvas.style.transformOrigin = "top left";
     canvas.style.imageRendering = "pixelated";
+
+    div.style.transform =
+    div.style.WebkitTransform =
+    div.style.MozTransform =
+    div.style.OTransform =
+    div.style.msTransform =
+            `scale(${1.0/scaleFactor}, ${1.0/scaleFactor})`;
     div.appendChild(canvas);
 
+    var canvasScaled = document.createElement("canvas");
+    canvasScaled.style.position = "absolute";
+    canvasScaled.style.left = "0px";
+    canvasScaled.style.top = "0px";
+    canvasScaled.style.transformOrigin = "top left";
+ 
+
+    canvasScaled.style.zIndex = '1';
+    canvasScaled.style.imageRendering = "crisp-edges";
+    div.appendChild(canvasScaled);
+
     var dirtyRects = [];
-    const doScaling = window.chrome && window.devicePixelRatio == 2;
+    const doScaling = window.chrome && (scaleFactor == 2 || scaleFactor == 1.5);
     
     const worker = doScaling ? new Worker('/tfjs/worker.js' ) : null;
+    if (worker) {
+        worker.postMessage({
+            isInit: true,
+            scaleFactor,
+            modelType: 'webgl'
+        })
+    }
 
     var xTiles = 0;
-    var yTiles = 0;
-
-    var scaledTiles = []
-    var scaledContexts = []
-    
-    var addTiles = function() {
-        if (!doScaling) {
-            return
-        }
-        xTiles = Math.ceil(layer.width / tileSize);
-        yTiles = Math.ceil(layer.height / tileSize);
-        const totalTiles = scaledTiles.length;
-        for (let t = 0; t<totalTiles; t++) {
-            const tile = scaledTiles.pop();
-            scaledContexts.pop();
-            tile.remove();
-        }
-        for (let j = 0; j < yTiles; j++) {
-            for (let i = 0; i < xTiles; i++) {
-                var canvasTile = document.createElement("canvas");
-                canvasTile.width = scaleFactor * tileSize;;
-                canvasTile.height = scaleFactor * tileSize;
-                const contextTile = canvasTile.getContext('2d');
-                scaledContexts.push(contextTile)
-                div.appendChild(canvasTile);
-                canvasTile.style.position = "absolute";
-                canvasTile.style.left = `${i*tileSize}px`;
-                canvasTile.style.top = `${j*tileSize}px`;
-                canvasTile.style.width = `${scaleFactor*tileSize}px`;
-                canvasTile.style.height = `${scaleFactor*tileSize}px`;
-                canvasTile.style.transform =
-                canvasTile.style.WebkitTransform =
-                canvasTile.style.MozTransform =
-                canvasTile.style.OTransform =
-                canvasTile.style.msTransform =
-                        `scale(${1.0/scaleFactor}, ${1.0/scaleFactor})`;
-                canvasTile.style.transformOrigin = "top left";
-                canvasTile.style.zIndex = "-1"
-                scaledTiles.push(canvasTile);
-            }
-        }
-    }
+    var yTiles = 0;    
 
     /**
      * The 2D display context of the canvas element backing this Layer.
@@ -144,6 +128,11 @@ Guacamole.Layer = function(width, height) {
      */
     var context = canvas.getContext("2d");
     context.save();
+    var contextScaled = canvasScaled.getContext("2d");
+    contextScaled.imageSmoothingEnabled = false;
+    contextScaled.imageSmoothingQuality = "low";
+
+    // contextScaled.save();
 
     /**
      * Whether the layer has not yet been drawn to. Once any draw operation
@@ -207,8 +196,7 @@ Guacamole.Layer = function(width, height) {
         imageData.data.set(new Uint8ClampedArray(e.data.pixels));
         const dirtyRect = dirtyRects.find(rect => rect.i === e.data.i && rect.j === e.data.j);
         if (e.data.dirtyTime >= dirtyRect.dirtyTime) {
-            scaledContexts[e.data.i + e.data.j * xTiles].putImageData(imageData, 0, 0);
-            scaledTiles[e.data.i + e.data.j * xTiles].style.zIndex = "1";
+            contextScaled.putImageData(imageData, e.data.i * scaleFactor * tileSize, e.data.j * scaleFactor * tileSize);
         }
     }
 
@@ -225,10 +213,11 @@ Guacamole.Layer = function(width, height) {
         const jLower = Math.floor(y / tileSize);
         const jUpper = Math.floor((y + image.height -1) / tileSize);
 
+        contextScaled.drawImage(image, x * scaleFactor, y * scaleFactor, image.width * scaleFactor, image.height * scaleFactor);
+
         const dirtyTime = Date.now();
         for (let i=iUpper; i>=iLower; i--) {
             for (let j=jLower; j<=jUpper; j++) {
-                scaledTiles[j*xTiles+i].style.zIndex = "-2";
                 worker.postMessage( {
                     pixels: context.getImageData(i*tileSize, j*tileSize,tileSize, tileSize).data.buffer,
                     i,
@@ -291,8 +280,11 @@ Guacamole.Layer = function(width, height) {
             // Resize canvas
             canvas.width = canvasWidth;
             canvas.height = canvasHeight;
-            div.style.width = `${canvas.width}px`;
-            div.style.height = `${canvas.height}px`;
+            canvasScaled.height = scaleFactor * canvasHeight;
+            canvasScaled.width = scaleFactor * canvasWidth;
+            contextScaled.imageSmoothingEnabled = false;
+            div.style.width = `${scaleFactor * canvas.width}px`;
+            div.style.height = `${scaleFactor * canvas.height}px`;
 
             // Redraw old data, if any
             if (oldData) {
@@ -318,8 +310,6 @@ Guacamole.Layer = function(width, height) {
         // Assign new layer dimensions
         layer.width = newWidth;
         layer.height = newHeight;
-
-        addTiles();
 
     };
 
@@ -404,7 +394,6 @@ Guacamole.Layer = function(width, height) {
      */
     this.height = height;
 
-    addTiles();
     /**
      * Returns the canvas element backing this Layer. Note that the dimensions
      * of the canvas may not exactly match those of the Layer, as resizing a
