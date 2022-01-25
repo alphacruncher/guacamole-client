@@ -55,7 +55,7 @@ Guacamole.Layer = function(width, height) {
      * @constant
      * @type {!number}
      */
-    var CANVAS_SIZE_FACTOR = 128;
+    var CANVAS_SIZE_FACTOR = 64;
 
     /**
      * The canvas element backing this Layer.
@@ -86,12 +86,8 @@ Guacamole.Layer = function(width, height) {
     canvas.style.transformOrigin = "top left";
     canvas.style.imageRendering = "pixelated";
 
-    div.style.transform =
-    div.style.WebkitTransform =
-    div.style.MozTransform =
-    div.style.OTransform =
-    div.style.msTransform =
-            `scale(${1.0/scaleFactor}, ${1.0/scaleFactor})`;
+    const doScaling = window.chrome && (scaleFactor == 2) && !(document.location.hash.includes('disableScaling=1'));
+
     div.appendChild(canvas);
 
     var canvasScaled = document.createElement("canvas");
@@ -99,14 +95,21 @@ Guacamole.Layer = function(width, height) {
     canvasScaled.style.left = "0px";
     canvasScaled.style.top = "0px";
     canvasScaled.style.transformOrigin = "top left";
- 
-
     canvasScaled.style.zIndex = '1';
     canvasScaled.style.imageRendering = "crisp-edges";
-    div.appendChild(canvasScaled);
+
+    if (doScaling) {
+        div.appendChild(canvasScaled);
+        div.style.transform =
+        div.style.WebkitTransform =
+        div.style.MozTransform =
+        div.style.OTransform =
+        div.style.msTransform =
+                `scale(${1.0/scaleFactor}, ${1.0/scaleFactor})`;
+    }
 
     var dirtyRects = [];
-    const doScaling = window.chrome && (scaleFactor == 2 || scaleFactor == 1.5);
+    const urlSearchParams = new URLSearchParams(window.location.search);
     
     const worker = doScaling ? new Worker('/tfjs/worker.js' ) : null;
     if (worker) {
@@ -214,22 +217,23 @@ Guacamole.Layer = function(width, height) {
         const jUpper = Math.floor((y + image.height -1) / tileSize);
 
         contextScaled.drawImage(image, x * scaleFactor, y * scaleFactor, image.width * scaleFactor, image.height * scaleFactor);
-
         const dirtyTime = Date.now();
         for (let i=iUpper; i>=iLower; i--) {
             for (let j=jLower; j<=jUpper; j++) {
-                worker.postMessage( {
-                    pixels: context.getImageData(i*tileSize, j*tileSize,tileSize, tileSize).data.buffer,
-                    i,
-                    j,
-                    dirtyTime
-                })
                 const index = dirtyRects.findIndex(rect => rect.i === i && rect.j === j)
                 if (index < 0) {
                     dirtyRects.push({i,j, dirtyTime});
                 } else {
                     dirtyRects[index].dirtyTime = dirtyTime
                 }
+                const pixels = context.getImageData(i*tileSize, j*tileSize,tileSize, tileSize).data.buffer;
+                //const pixels = new ImageData(tileSize, tileSize).data.buffer;
+                worker.postMessage( {
+                    pixels,
+                    i,
+                    j,
+                    dirtyTime
+                },[pixels])
             }
         }
     };
@@ -245,6 +249,7 @@ Guacamole.Layer = function(width, height) {
      *     The new height to assign to this Layer.
      */
     var resize = function resize(newWidth, newHeight) {
+        console.log("resize")
         // Default size to zero
         newWidth = newWidth || 0;
         newHeight = newHeight || 0;
