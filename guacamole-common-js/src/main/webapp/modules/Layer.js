@@ -79,6 +79,8 @@ Guacamole.Layer = function(width, height) {
 
 
     var canvas = document.createElement("canvas");
+    var offScreenCanvas = new OffscreenCanvas(0,0);
+
     canvas.style.position = "absolute";
     canvas.style.left = "0px";
     canvas.style.top = "0px";
@@ -131,6 +133,7 @@ Guacamole.Layer = function(width, height) {
      */
     var context = canvas.getContext("2d");
     context.save();
+    var offScreenContext = offScreenCanvas.getContext("2d");
     var contextScaled = canvasScaled.getContext("2d");
     contextScaled.imageSmoothingEnabled = false;
     contextScaled.imageSmoothingQuality = "low";
@@ -211,31 +214,33 @@ Guacamole.Layer = function(width, height) {
         if (!doScaling) {
             return
         }
+        const dirtyTime = performance.now()
+        contextScaled.drawImage(image, x * scaleFactor, y * scaleFactor, image.width * scaleFactor, image.height * scaleFactor);
         const iLower = Math.floor(x / tileSize);
         const iUpper = Math.floor((x + image.width -1) / tileSize);
         const jLower = Math.floor(y / tileSize);
         const jUpper = Math.floor((y + image.height -1) / tileSize);
 
-        contextScaled.drawImage(image, x * scaleFactor, y * scaleFactor, image.width * scaleFactor, image.height * scaleFactor);
-        const dirtyTime = Date.now();
         for (let i=iUpper; i>=iLower; i--) {
             for (let j=jLower; j<=jUpper; j++) {
                 const index = dirtyRects.findIndex(rect => rect.i === i && rect.j === j)
                 if (index < 0) {
                     dirtyRects.push({i,j, dirtyTime});
                 } else {
-                    dirtyRects[index].dirtyTime = dirtyTime
+                    dirtyRects[index].dirtyTime = Math.max(dirtyTime, dirtyRects[index].dirtyTime);
                 }
-                const pixels = context.getImageData(i*tileSize, j*tileSize,tileSize, tileSize).data.buffer;
-                //const pixels = new ImageData(tileSize, tileSize).data.buffer;
-                worker.postMessage( {
-                    pixels,
-                    i,
-                    j,
-                    dirtyTime
-                },[pixels])
             }
         }
+        const bitmap = image;
+        worker.postMessage(
+            {
+                isBitmap: true,
+                x,
+                y,
+                dirtyTime,
+                bitmap
+            },[bitmap]
+        )
     };
     /**
      * Resizes the canvas element backing this Layer. This function should only
@@ -249,7 +254,6 @@ Guacamole.Layer = function(width, height) {
      *     The new height to assign to this Layer.
      */
     var resize = function resize(newWidth, newHeight) {
-        console.log("resize")
         // Default size to zero
         newWidth = newWidth || 0;
         newHeight = newHeight || 0;
@@ -260,6 +264,7 @@ Guacamole.Layer = function(width, height) {
 
         // Resize only if canvas dimensions are actually changing
         if (canvas.width !== canvasWidth || canvas.height !== canvasHeight) {
+            console.log("resize")
 
             // Copy old data only if relevant and non-empty
             var oldData = null;
@@ -285,8 +290,16 @@ Guacamole.Layer = function(width, height) {
             // Resize canvas
             canvas.width = canvasWidth;
             canvas.height = canvasHeight;
+            offScreenCanvas.width = canvasWidth;;
+            offScreenCanvas.height = canvasHeight;
             canvasScaled.height = scaleFactor * canvasHeight;
             canvasScaled.width = scaleFactor * canvasWidth;
+
+            worker.postMessage({
+                'isResize': true,
+                width: canvas.width,
+                height: canvas.height,
+            })
             contextScaled.imageSmoothingEnabled = false;
             div.style.width = `${scaleFactor * canvas.width}px`;
             div.style.height = `${scaleFactor * canvas.height}px`;
@@ -439,6 +452,22 @@ Guacamole.Layer = function(width, height) {
 
     };
 
+    this.sendBlob = function sendBlob(blob, x, y, image, dirtyTime) {
+        
+        blob.arrayBuffer().then(buffer =>
+            {
+            worker.postMessage(
+                {
+                    isBlob: true,
+                    x,
+                    y,
+                    dirtyTime,
+                    buffer
+                },[buffer]
+            )
+            })
+    }
+
     /**
      * Changes the size of this Layer to the given width and height. Resizing
      * is only attempted if the new size provided is actually different from
@@ -471,6 +500,7 @@ Guacamole.Layer = function(width, height) {
     this.drawImage = function(x, y, image) {
         if (layer.autosize) fitRect(x, y, image.width, image.height);
         context.drawImage(image, x, y);
+        // offScreenContext.drawImage(image, x, y);
         drawScaledImage(x, y, image);
         empty = false;
     };

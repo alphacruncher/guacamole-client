@@ -600,6 +600,9 @@ Guacamole.Display = function() {
 
         var task;
 
+        const dirtyTime = performance.now();
+
+
         // Prefer createImageBitmap() over blob URLs if available
         if (window.createImageBitmap) {
 
@@ -612,6 +615,7 @@ Guacamole.Display = function() {
 
             // Load image from provided blob
             window.createImageBitmap(blob).then(function bitmapLoaded(decoded) {
+                layer.sendBlob(blob, x, y, decoded, dirtyTime);
                 bitmap = decoded;
                 task.unblock();
             });
