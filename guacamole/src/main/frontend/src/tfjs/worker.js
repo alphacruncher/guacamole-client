@@ -7,10 +7,18 @@ const worker = self;
 var scaleFactor = 2.0;
 var scaleModel = null;
 
-var offscreen = new OffscreenCanvas(1, 1);
+var offscreen = new OffscreenCanvas(1024, 1024);
+var offscreenTwo = new OffscreenCanvas(1024, 1024);
+var contextTwo = offscreenTwo.getContext("webgl");
+var contextTwoBitmap = offscreenTwo.getContext("bitmaprenderer");
+
 var context = offscreen.getContext("2d");
-var tileSize = 64;
+var tileSize = 4 * 64;
 var numBlobProcessing = 0;
+
+var updateBitmaps = {};
+var updateTensors = {};
+var updateRefs = {};
 
 class DirtyRectsQueue {
   constructor() {
@@ -22,13 +30,19 @@ class DirtyRectsQueue {
     this.numSent = 0;
   }
 
-  push(i, j, dirtyTime, priority) {
+  push(i, j, startX, endX, startY, endY, dirtyTime, priority, id) {
     const index = this.queue.findIndex((rect) => rect.i === i && rect.j === j);
-    var element = { i, j, dirtyTime };
+    var element = { i, j, startX, endX, startY, endY, dirtyTime, id };
     if (index >= 0) {
       const prevElement = this.queue.splice(index, 1);
       const prevPrio = this.priority.splice(index, 1);
       if (prevElement.dirtyTime > dirtyTime) {
+        updateRefs[id] = updateRefs[id] - 1;
+        if (updateRefs[id] === 0) {
+          updateTensors[id].dispose();
+          updateBitmaps[id] = null;
+          updateRefs[id] = null;
+        }
         element = prevElement[0];
         priority = prevPrio[0];
       }
@@ -49,7 +63,7 @@ class DirtyRectsQueue {
     if (this.queue.length === 0) {
       return;
     }
-    if (!scaleModel || this.numReceived - this.numSent > 4) {
+    if (!scaleModel || this.numReceived - this.numSent > 1) {
       setTimeout(this.tryNext, 0);
       return;
     }
@@ -57,75 +71,115 @@ class DirtyRectsQueue {
     const queueItem = this.queue.pop();
     this.priority.pop();
     this.numReceived += 1;
-    const startTime = performance.now()
-    const rawPixels = context.getImageData(
-      queueItem.i * tileSize,
-      queueItem.j * tileSize,
-      tileSize,
-      tileSize
-    ).data.buffer;
-    console.log(performance.now() - startTime);
-    const view = new Uint8Array(rawPixels);
-    var meanR = 0;
-    var meanRsq = 0;
-    var meanG = 0;
-    var meanGsq = 0;
-    var meanB = 0;
-    var meanBsq = 0;
-    const stepSize = 4;
-    const numChannels = 4;
-    const denominator = view.length / stepSize / numChannels;
-    for (let i = 0; i < view.length; i += numChannels * stepSize) {
-      meanR += view[i] / denominator;
-      meanRsq += (view[i] * view[i]) / denominator;
-      meanG += view[i + 1] / denominator;
-      meanGsq += (view[i + 1] * view[i + 1]) / denominator;
-      meanB += view[i + 2] / denominator;
-      meanBsq += (view[i + 2] * view[i + 2]) / denominator;
+    updateRefs[queueItem.id] = updateRefs[queueItem.id] - 1;
+    if (!updateTensors[queueItem.id]) {
+      updateTensors[queueItem.id] = tf.browser.fromPixels(
+        updateBitmaps[queueItem.id].bitmap
+      );
     }
-    const priority =
-      meanRsq + meanGsq + meanBsq - meanR ** 2 - meanG ** 2 - meanB ** 2;
-    if (priority < 1) {
-      this.numSent += 1;
-      return 0;
-    }
-
-    //let pixels = new ImageData(128, 128);
-    // pixels.data.set(new Uint8ClampedArray(queueItem.pixels));
     tf.tidy(() => {
-      const pixels = tf
-        .tensor3d(new Uint8ClampedArray(rawPixels), [
+      var pixels = null;
+      if (
+        queueItem.startX === queueItem.startY &&
+        queueItem.startX === 0 &&
+        queueItem.endX === queueItem.endY &&
+        queueItem.endX === scaleFactor * tileSize
+      ) {
+        pixels = updateTensors[queueItem.id].slice(
+          [
+            queueItem.j * tileSize +
+              queueItem.startY / scaleFactor -
+              updateBitmaps[queueItem.id].y,
+            queueItem.i * tileSize +
+              queueItem.startX / scaleFactor -
+              updateBitmaps[queueItem.id].x,
+            0,
+          ],
+          [
+            queueItem.endY / scaleFactor - queueItem.startY / scaleFactor,
+            queueItem.endX / scaleFactor - queueItem.startX / scaleFactor,
+            3,
+          ]
+        );
+      } else {
+        const rawPixels = context.getImageData(
+          queueItem.i * tileSize,
+          queueItem.j * tileSize,
           tileSize,
-          tileSize,
-          4,
-        ])
-        .slice([0, 0, 0], [tileSize, tileSize, 3]);
-      const exampleLocal = pixels.cast("float32").div(255.0).expandDims(0);
+          tileSize
+        ).data.buffer;
+        pixels = tf
+          .tensor3d(new Uint8ClampedArray(rawPixels), [tileSize, tileSize, 4])
+          .slice([0, 0, 0], [tileSize, tileSize, 3]);
+      }
+      const p = tf.tensor(2).toInt();
+      const priority = tf.sum(
+        tf.sub(tf.mean(pixels.pow(p), [0, 1]), tf.mean(pixels, [0, 1]).pow(p))
+      );
+      const priorityValue = priority.dataSync()[0];
 
+      if (priorityValue < 1) {
+        this.numSent += 1;
+        if (updateRefs[queueItem.id] === 0) {
+          updateTensors[queueItem.id].dispose();
+          updateBitmaps[queueItem.id] = null;
+          updateRefs[queueItem.id] = null;
+        }
+        return 0;
+      }
+
+      const exampleLocal = pixels
+        .pad([
+          [
+            queueItem.startY / scaleFactor,
+            tileSize - queueItem.endY / scaleFactor,
+          ],
+          [
+            queueItem.startX / scaleFactor,
+            tileSize - queueItem.endX / scaleFactor,
+          ],
+          [0, 0],
+        ])
+        .cast("float32")
+        .div(255.0)
+        .expandDims(0);
+
+      var predictionClippedLocal = null;
       if (scaleModel) {
         const predictionLocal = scaleModel.execute({ input_1: exampleLocal });
-        // predictionLocal.dataSync();
-        const predictionClippedLocal = predictionLocal
+        predictionClippedLocal = predictionLocal
           .clipByValue(0, 1)
-          .squeeze(0);
+          .squeeze(0)
+          .slice(
+            [queueItem.startY, queueItem.startX],
+            [
+              queueItem.endY - queueItem.startY,
+              queueItem.endX - queueItem.startX,
+            ]
+          );
         tf.browser.toPixels(predictionClippedLocal, null).then((pixels) => {
           const buffer = pixels.buffer;
           postMessage(
             {
               i: queueItem.i,
               j: queueItem.j,
+              startX: queueItem.startX,
+              endX: queueItem.endX,
+              startY: queueItem.startY,
+              endY: queueItem.endY,
               pixels: buffer,
               dirtyTime: queueItem.dirtyTime,
             },
             [buffer]
           );
-          predictionClippedLocal.dispose();
-          predictionLocal.dispose();
-          exampleLocal.dispose();
+          if (updateRefs[queueItem.id] === 0) {
+            updateTensors[queueItem.id].dispose();
+            updateBitmaps[queueItem.id] = null;
+            updateRefs[queueItem.id] = null;
+          }
           this.numSent += 1;
         });
       }
-      return 0;
     });
   }
 }
@@ -152,17 +206,44 @@ onmessage = function (e) {
 
   if (e.data.isBitmap) {
     numBlobProcessing += 1;
+    context.drawImage(e.data.bitmap, e.data.x, e.data.y);
     tf.ready().then(() => {
       const bitmap = e.data.bitmap;
-      context.drawImage(bitmap, e.data.x, e.data.y);
+      const startTime = performance.now();
+      const id = crypto.randomUUID();
+      updateBitmaps[id] = {
+        bitmap: e.data.bitmap,
+        x: e.data.x,
+        y: e.data.y,
+      };
       const iLower = Math.floor(e.data.x / tileSize);
-      const iUpper = Math.floor((e.data.x + bitmap.width - 1) / tileSize);
+      const iUpper = Math.ceil((e.data.x + bitmap.width) / tileSize) - 1;
       const jLower = Math.floor(e.data.y / tileSize);
-      const jUpper = Math.floor((e.data.y + bitmap.height - 1) / tileSize);
+      const jUpper = Math.ceil((e.data.y + bitmap.height) / tileSize) - 1;
+      updateRefs[id] = (jUpper - jLower + 1) * (iUpper - iLower + 1);
 
       for (let i = iUpper; i >= iLower; i--) {
         for (let j = jLower; j <= jUpper; j++) {
-          requestsQueue.push(i, j, e.data.dirtyTime, e.data.dirtyTime);
+          // relative to within tile
+          const startX = Math.max(e.data.x - i * tileSize, 0);
+          const endX =
+            Math.min(e.data.x + bitmap.width, (i + 1) * tileSize) -
+            i * tileSize;
+          const startY = Math.max(e.data.y - j * tileSize, 0);
+          const endY =
+            Math.min(e.data.y + bitmap.height, (j + 1) * tileSize) -
+            j * tileSize;
+          requestsQueue.push(
+            i,
+            j,
+            startX * scaleFactor,
+            endX * scaleFactor,
+            startY * scaleFactor,
+            endY * scaleFactor,
+            e.data.dirtyTime,
+            e.data.dirtyTime,
+            id
+          );
         }
       }
       numBlobProcessing -= 1;

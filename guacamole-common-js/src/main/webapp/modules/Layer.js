@@ -55,7 +55,7 @@ Guacamole.Layer = function(width, height) {
      * @constant
      * @type {!number}
      */
-    var CANVAS_SIZE_FACTOR = 64;
+    var CANVAS_SIZE_FACTOR = 64 * 4;
 
     /**
      * The canvas element backing this Layer.
@@ -198,11 +198,11 @@ Guacamole.Layer = function(width, height) {
     };
 
     var drawRectFromWorker = function(e) {
-        const imageData = new ImageData( scaleFactor*tileSize, scaleFactor*tileSize);
+        const imageData = new ImageData( e.data.endX - e.data.startX, e.data.endY - e.data.startY);
         imageData.data.set(new Uint8ClampedArray(e.data.pixels));
         const dirtyRect = dirtyRects.find(rect => rect.i === e.data.i && rect.j === e.data.j);
         if (e.data.dirtyTime >= dirtyRect.dirtyTime) {
-            contextScaled.putImageData(imageData, e.data.i * scaleFactor * tileSize, e.data.j * scaleFactor * tileSize);
+            contextScaled.putImageData(imageData, e.data.i * scaleFactor * tileSize + e.data.startX, e.data.j * scaleFactor * tileSize + e.data.startY);
         }
     }
 
@@ -264,8 +264,6 @@ Guacamole.Layer = function(width, height) {
 
         // Resize only if canvas dimensions are actually changing
         if (canvas.width !== canvasWidth || canvas.height !== canvasHeight) {
-            console.log("resize")
-
             // Copy old data only if relevant and non-empty
             var oldData = null;
             if (!empty && canvas.width !== 0 && canvas.height !== 0) {
