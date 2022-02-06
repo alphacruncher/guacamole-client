@@ -79,39 +79,25 @@ class DirtyRectsQueue {
     }
     tf.tidy(() => {
       var pixels = null;
-      if (
-        queueItem.startX === queueItem.startY &&
-        queueItem.startX === 0 &&
-        queueItem.endX === queueItem.endY &&
-        queueItem.endX === scaleFactor * tileSize
-      ) {
-        pixels = updateTensors[queueItem.id].slice(
-          [
-            queueItem.j * tileSize +
-              queueItem.startY / scaleFactor -
-              updateBitmaps[queueItem.id].y,
-            queueItem.i * tileSize +
-              queueItem.startX / scaleFactor -
-              updateBitmaps[queueItem.id].x,
-            0,
-          ],
-          [
-            queueItem.endY / scaleFactor - queueItem.startY / scaleFactor,
-            queueItem.endX / scaleFactor - queueItem.startX / scaleFactor,
-            3,
-          ]
-        );
-      } else {
-        const rawPixels = context.getImageData(
-          queueItem.i * tileSize,
-          queueItem.j * tileSize,
-          tileSize,
-          tileSize
-        ).data.buffer;
-        pixels = tf
-          .tensor3d(new Uint8ClampedArray(rawPixels), [tileSize, tileSize, 4])
-          .slice([0, 0, 0], [tileSize, tileSize, 3]);
-      }
+     
+      console.log(queueItem)
+      pixels = updateTensors[queueItem.id].slice(
+        [
+          queueItem.j * tileSize +
+            queueItem.startY / scaleFactor -
+            updateBitmaps[queueItem.id].y,
+          queueItem.i * tileSize +
+            queueItem.startX / scaleFactor -
+            updateBitmaps[queueItem.id].x,
+          0,
+        ],
+        [
+          queueItem.endY / scaleFactor - queueItem.startY / scaleFactor,
+          queueItem.endX / scaleFactor - queueItem.startX / scaleFactor,
+          3,
+        ]
+      );
+      
       const p = tf.tensor(2).toInt();
       const priority = tf.sum(
         tf.sub(tf.mean(pixels.pow(p), [0, 1]), tf.mean(pixels, [0, 1]).pow(p))
@@ -207,12 +193,16 @@ onmessage = function (e) {
   if (e.data.isBitmap) {
     numBlobProcessing += 1;
     context.drawImage(e.data.bitmap, e.data.x, e.data.y);
+    createImageBitmap(offscreen).then(bitmap => {
+    //const bitmap = offscreen.transferToImageBitmap()
+    e.data.x = 0;
+    e.data.y = 0;
+    
     tf.ready().then(() => {
-      const bitmap = e.data.bitmap;
       const startTime = performance.now();
       const id = crypto.randomUUID();
       updateBitmaps[id] = {
-        bitmap: e.data.bitmap,
+        bitmap: bitmap,
         x: e.data.x,
         y: e.data.y,
       };
@@ -248,5 +238,6 @@ onmessage = function (e) {
       }
       numBlobProcessing -= 1;
     });
+  })
   }
 };
