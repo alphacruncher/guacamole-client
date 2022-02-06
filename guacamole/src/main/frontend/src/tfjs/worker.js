@@ -80,7 +80,6 @@ class DirtyRectsQueue {
     tf.tidy(() => {
       var pixels = null;
      
-      console.log(queueItem)
       pixels = updateTensors[queueItem.id].slice(
         [
           queueItem.j * tileSize +
@@ -115,17 +114,6 @@ class DirtyRectsQueue {
       }
 
       const exampleLocal = pixels
-        .pad([
-          [
-            queueItem.startY / scaleFactor,
-            tileSize - queueItem.endY / scaleFactor,
-          ],
-          [
-            queueItem.startX / scaleFactor,
-            tileSize - queueItem.endX / scaleFactor,
-          ],
-          [0, 0],
-        ])
         .cast("float32")
         .div(255.0)
         .expandDims(0);
@@ -192,25 +180,27 @@ onmessage = function (e) {
 
   if (e.data.isBitmap) {
     numBlobProcessing += 1;
+    const id = crypto.randomUUID();
     context.drawImage(e.data.bitmap, e.data.x, e.data.y);
-    createImageBitmap(offscreen).then(bitmap => {
+    const iLower = Math.floor(e.data.x / tileSize);
+    const iUpper = Math.ceil((e.data.x + e.data.bitmap.width) / tileSize) - 1;
+    const jLower = Math.floor(e.data.y / tileSize);
+    const jUpper = Math.ceil((e.data.y + e.data.bitmap.height) / tileSize) - 1;
+    updateRefs[id] = (jUpper - jLower + 1) * (iUpper - iLower + 1);
+
+    createImageBitmap(offscreen,iLower * tileSize, jLower * tileSize, (iUpper - iLower + 1) * tileSize, (jUpper - jLower + 1) * tileSize).then(bitmap => {
     //const bitmap = offscreen.transferToImageBitmap()
-    e.data.x = 0;
-    e.data.y = 0;
+    e.data.x = iLower * tileSize;
+    e.data.y = jLower * tileSize;
     
     tf.ready().then(() => {
       const startTime = performance.now();
-      const id = crypto.randomUUID();
       updateBitmaps[id] = {
         bitmap: bitmap,
         x: e.data.x,
         y: e.data.y,
       };
-      const iLower = Math.floor(e.data.x / tileSize);
-      const iUpper = Math.ceil((e.data.x + bitmap.width) / tileSize) - 1;
-      const jLower = Math.floor(e.data.y / tileSize);
-      const jUpper = Math.ceil((e.data.y + bitmap.height) / tileSize) - 1;
-      updateRefs[id] = (jUpper - jLower + 1) * (iUpper - iLower + 1);
+
 
       for (let i = iUpper; i >= iLower; i--) {
         for (let j = jLower; j <= jUpper; j++) {
