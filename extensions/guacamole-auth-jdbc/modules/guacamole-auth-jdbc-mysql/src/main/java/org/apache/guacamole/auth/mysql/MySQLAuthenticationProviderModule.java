@@ -72,8 +72,6 @@ public class MySQLAuthenticationProviderModule implements Module {
         myBatisProperties.setProperty("JDBC.host", environment.getMySQLHostname());
         myBatisProperties.setProperty("JDBC.port", String.valueOf(environment.getMySQLPort()));
         myBatisProperties.setProperty("JDBC.schema", environment.getMySQLDatabase());
-        myBatisProperties.setProperty("JDBC.username", environment.getMySQLUsername());
-        myBatisProperties.setProperty("JDBC.password", environment.getMySQLPassword());
         myBatisProperties.setProperty("JDBC.autoCommit", "false");
         myBatisProperties.setProperty("mybatis.pooled.pingEnabled", "true");
         myBatisProperties.setProperty("mybatis.pooled.pingQuery", "SELECT 1");
@@ -91,7 +89,10 @@ public class MySQLAuthenticationProviderModule implements Module {
         // For compatibility, set legacy useSSL property when SSL is disabled.
         if (sslMode == MySQLSSLMode.DISABLED)
             driverProperties.setProperty("useSSL", "false");
-        
+        // For compatibility, set legacy useSSL property when SSL is eisabled.(Required for mariadb connector/j)
+        else
+            driverProperties.setProperty("useSSL", "true");
+
         // Check other SSL settings and set as required
         File trustStore = environment.getMySQLSSLTrustStore();
         if (trustStore != null)

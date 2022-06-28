@@ -44,7 +44,7 @@ import org.apache.directory.api.ldap.model.name.Dn;
 import org.apache.directory.ldap.client.api.LdapNetworkConnection;
 import org.apache.guacamole.GuacamoleException;
 import org.apache.guacamole.GuacamoleServerException;
-import org.apache.guacamole.auth.ldap.conf.ConfigurationService;
+import org.apache.guacamole.auth.ldap.conf.LDAPConfiguration;
 import org.apache.guacamole.auth.ldap.conf.LDAPGuacamoleProperties;
 import org.apache.guacamole.net.auth.Identifiable;
 import org.slf4j.Logger;
@@ -69,12 +69,6 @@ public class ObjectQueryService {
      */
     @Inject
     private LDAPConnectionService ldapService;
-
-    /**
-     * Service for retrieving LDAP server configuration information.
-     */
-    @Inject
-    private ConfigurationService confService;
 
     /**
      * Returns the identifier of the object represented by the given LDAP
@@ -184,6 +178,9 @@ public class ObjectQueryService {
      * list of all results. Only objects beneath the given base DN are
      * included in the search.
      *
+     * @param config
+     *     The configuration of the LDAP server being queried.
+     *
      * @param ldapConnection
      *     The current connection to the LDAP server, associated with the
      *     current user.
@@ -197,6 +194,11 @@ public class ObjectQueryService {
      * @param searchHop
      *     The current level of referral depth for this search, used for
      *     limiting the maximum depth to which referrals can go.
+     * 
+     * @param attributes
+     *     A collection of the names of attributes that should be retrieved
+     *     from LDAP entries returned by the search, or null if all available
+     *     attributes should be returned.
      *
      * @return
      *     A list of all results accessible to the user currently bound under
@@ -207,11 +209,13 @@ public class ObjectQueryService {
      *     information required to execute the query cannot be read from
      *     guacamole.properties.
      */
-    public List<Entry> search(LdapNetworkConnection ldapConnection,
-            Dn baseDN, ExprNode query, int searchHop) throws GuacamoleException {
+    public List<Entry> search(LDAPConfiguration config,
+            LdapNetworkConnection ldapConnection, Dn baseDN, ExprNode query,
+            int searchHop, Collection<String> attributes)
+            throws GuacamoleException {
 
         // Refuse to follow referrals if limit has been reached
-        int maxHops = confService.getMaxReferralHops();
+        int maxHops = config.getMaxReferralHops();
         if (searchHop >= maxHops) {
             logger.debug("Refusing to follow further referrals as the maximum "
                     + "number of referral hops ({}) has been reached. LDAP "
@@ -224,13 +228,15 @@ public class ObjectQueryService {
         logger.debug("Searching \"{}\" for objects matching \"{}\".", baseDN, query);
 
         // Search within subtree of given base DN
-        SearchRequest request = ldapService.getSearchRequest(baseDN, query);
-            
+        SearchRequest request = ldapService.getSearchRequest(config, baseDN, query);
+        if (attributes != null)
+            request.addAttributes(attributes.toArray(new String[0]));
+
         // Produce list of all entries in the search result, automatically
         // following referrals if configured to do so
         List<Entry> entries = new ArrayList<>();
-            
         try (SearchCursor results = ldapConnection.search(request)) {
+
             while (results.next()) {
 
                 // Add entry directly if no referral is involved
@@ -248,10 +254,10 @@ public class ObjectQueryService {
 
                             // Connect to referred LDAP server to retrieve further results, ensuring the network
                             // connection is always closed when it will no longer be used
-                            try (LdapNetworkConnection referralConnection = ldapService.bindAs(url, ldapConnection)) {
+                            try (LdapNetworkConnection referralConnection = ldapService.bindAs(config, url, ldapConnection)) {
                                 if (referralConnection != null) {
                                     logger.debug("Following referral to \"{}\"...", url);
-                                    entries.addAll(search(referralConnection, baseDN, query, searchHop + 1));
+                                    entries.addAll(search(config, referralConnection, baseDN, query, searchHop + 1, attributes));
                                 }
                                 else
                                     logger.debug("Could not bind with LDAP "
@@ -295,6 +301,9 @@ public class ObjectQueryService {
      * given connection, returning a list of all results. Only objects beneath
      * the given base DN are included in the search.
      *
+     * @param config
+     *     The configuration of the LDAP server being queried.
+     *
      * @param ldapConnection
      *     The current connection to the LDAP server, associated with the
      *     current user.
@@ -306,15 +315,20 @@ public class ObjectQueryService {
      *     The LDAP filter to apply to reduce the results of the query in
      *     addition to testing the values of the given attributes.
      *
-     * @param attributes
+     * @param filterAttributes
      *     A collection of all attributes to test for equivalence to the given
      *     value, in order of decreasing priority.
      *
-     * @param attributeValue
+     * @param filterValue
      *     The value that should be searched search for within the attributes
      *     of objects within the LDAP directory. If null, the search will test
      *     only for the presence of at least one of the given attributes on
      *     each object, regardless of the value of those attributes.
+     * 
+     * @param attributes
+     *     A collection of the names of attributes that should be retrieved
+     *     from LDAP entries returned by the search, or null if all available
+     *     attributes should be returned.
      *
      * @return
      *     A list of all results accessible to the user currently bound under
@@ -325,11 +339,12 @@ public class ObjectQueryService {
      *     information required to execute the query cannot be read from
      *     guacamole.properties.
      */
-    public List<Entry> search(LdapNetworkConnection ldapConnection, Dn baseDN,
-            ExprNode filter, Collection<String> attributes, String attributeValue)
-            throws GuacamoleException {
-        ExprNode query = generateQuery(filter, attributes, attributeValue);
-        return search(ldapConnection, baseDN, query, 0);
+    public List<Entry> search(LDAPConfiguration config,
+            LdapNetworkConnection ldapConnection, Dn baseDN, ExprNode filter,
+            Collection<String> filterAttributes, String filterValue,
+            Collection<String> attributes) throws GuacamoleException {
+        ExprNode query = generateQuery(filter, filterAttributes, filterValue);
+        return search(config, ldapConnection, baseDN, query, 0, attributes);
     }
 
     /**
